@@ -1,0 +1,38 @@
+[project]
+name = "mai-agent-langgraph"
+version = "0.1.0"
+description = "Lõi chatbot Mai sử dụng LangChain và LangGraph"
+requires-python = ">=3.11"
+dependencies = [
+  "langchain>=1.0,<2.0",
+  "langgraph>=1.0,<2.0",
+  "langchain-openai>=1.0,<2.0",
+  "pydantic-settings>=2.10,<3.0",
+  "python-dotenv>=1.1,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9.0",
+  "ruff>=0.12,<1.0",
+]
+
+[project.scripts]
+mai-agent = "mai_agent.runner:main"
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
