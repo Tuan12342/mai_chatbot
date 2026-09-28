@@ -11,7 +11,7 @@ def invoke(message: str):
 def test_greeting_route() -> None:
     result = invoke("Xin chào Mai")
     assert result["intent"] == "greeting"
-    assert "em là Mai" in result["reply"]
+    assert "mình là Mai" in result["reply"]
 
 
 def test_recommendation_route() -> None:

@@ -5,7 +5,7 @@ from mai_agent.graph import create_agent_graph
 
 def main() -> None:
     graph = create_agent_graph()
-    print("Mai Agent đã sẵn sàng. Gõ 'exit' để dừng.\n")
+    print("Mai đã sẵn sàng.")
 
     while True:
         text = input("Bạn: ").strip()

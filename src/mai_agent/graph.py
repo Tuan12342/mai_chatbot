@@ -1,12 +1,9 @@
 from langgraph.graph import END, START, StateGraph
 
-from mai_agent.nodes import (
-    assistant_node,
-    classify_intent_node,
-    fallback_node,
-    greeting_node,
-    order_node,
-)
+from mai_agent.routing import classify_intent_node, fallback_node
+from mai_agent.skills.greeting import greeting_node
+from mai_agent.skills.order import order_node
+from mai_agent.skills.product import assistant_node
 from mai_agent.state import AgentState
 
 

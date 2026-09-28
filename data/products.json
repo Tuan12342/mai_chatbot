@@ -1,0 +1,112 @@
+[
+  {
+    "id": "OA001",
+    "name": "Sữa rửa mặt dịu nhẹ OA Gentle Cleanser",
+    "category": "Sữa rửa mặt",
+    "skin_types": ["da thường", "da khô", "da nhạy cảm"],
+    "ingredients": ["Glycerin", "Panthenol", "Chiết xuất yến mạch"],
+    "benefits": ["Làm sạch", "Duy trì độ ẩm", "Làm dịu da"],
+    "usage": "Tạo bọt, massage trên da ẩm rồi rửa sạch.",
+    "price_vnd": 189000,
+    "stock": 50
+  },
+  {
+    "id": "OA002",
+    "name": "Gel rửa mặt OA Purifying Gel",
+    "category": "Sữa rửa mặt",
+    "skin_types": ["da dầu", "da hỗn hợp"],
+    "ingredients": ["Salicylic Acid 0.5%", "Zinc PCA", "Niacinamide"],
+    "benefits": ["Làm sạch dầu thừa", "Hỗ trợ thông thoáng lỗ chân lông"],
+    "usage": "Dùng trên da ẩm 1-2 lần mỗi ngày rồi rửa sạch.",
+    "price_vnd": 219000,
+    "stock": 35
+  },
+  {
+    "id": "OA003",
+    "name": "Toner cấp ẩm OA Hydrating Toner",
+    "category": "Toner",
+    "skin_types": ["mọi loại da"],
+    "ingredients": ["Hyaluronic Acid", "Beta-Glucan", "Allantoin"],
+    "benefits": ["Cấp ẩm", "Làm dịu da"],
+    "usage": "Thoa lên da sạch vào buổi sáng và tối.",
+    "price_vnd": 245000,
+    "stock": 42
+  },
+  {
+    "id": "OA004",
+    "name": "Serum phục hồi OA Barrier Repair Serum",
+    "category": "Serum",
+    "skin_types": ["da khô", "da nhạy cảm"],
+    "ingredients": ["Ceramide NP", "Panthenol 5%", "Squalane"],
+    "benefits": ["Hỗ trợ phục hồi hàng rào da", "Giảm khô căng"],
+    "usage": "Thoa 2-3 giọt sau toner vào sáng và tối.",
+    "price_vnd": 389000,
+    "stock": 28
+  },
+  {
+    "id": "OA005",
+    "name": "Serum làm sáng OA Brightening Serum",
+    "category": "Serum",
+    "skin_types": ["da thường", "da dầu", "da hỗn hợp"],
+    "ingredients": ["Niacinamide 10%", "Alpha Arbutin 2%"],
+    "benefits": ["Hỗ trợ đều màu da", "Cải thiện vẻ ngoài vết thâm"],
+    "usage": "Thoa 2-3 giọt vào buổi tối.",
+    "price_vnd": 359000,
+    "stock": 31
+  },
+  {
+    "id": "OA006",
+    "name": "Kem dưỡng OA Ceramide Cream",
+    "category": "Kem dưỡng",
+    "skin_types": ["da thường", "da khô", "da nhạy cảm"],
+    "ingredients": ["Ceramide Complex", "Cholesterol", "Fatty Acids"],
+    "benefits": ["Khóa ẩm", "Hỗ trợ hàng rào bảo vệ da"],
+    "usage": "Thoa ở bước cuối của chu trình dưỡng da.",
+    "price_vnd": 329000,
+    "stock": 40
+  },
+  {
+    "id": "OA007",
+    "name": "Kem dưỡng OA Oil-Free Gel Cream",
+    "category": "Kem dưỡng",
+    "skin_types": ["da dầu", "da hỗn hợp"],
+    "ingredients": ["Hyaluronic Acid", "Niacinamide", "Trà xanh"],
+    "benefits": ["Cấp ẩm nhẹ", "Hạn chế cảm giác nhờn"],
+    "usage": "Thoa sau serum vào sáng và tối.",
+    "price_vnd": 299000,
+    "stock": 37
+  },
+  {
+    "id": "OA008",
+    "name": "Kem chống nắng OA Daily UV Fluid SPF 50+ PA++++",
+    "category": "Kem chống nắng",
+    "skin_types": ["mọi loại da"],
+    "ingredients": ["Uvinul A Plus", "Uvinul T150", "Tinosorb S"],
+    "benefits": ["Bảo vệ da trước tia UVA và UVB"],
+    "usage": "Thoa trước khi ra nắng 15 phút và thoa lại khi cần.",
+    "price_vnd": 315000,
+    "stock": 60
+  },
+  {
+    "id": "OA009",
+    "name": "Mặt nạ OA Soothing Mask",
+    "category": "Mặt nạ",
+    "skin_types": ["da thường", "da khô", "da nhạy cảm"],
+    "ingredients": ["Centella Asiatica", "Madecassoside", "Allantoin"],
+    "benefits": ["Làm dịu da", "Bổ sung độ ẩm"],
+    "usage": "Đắp trên da sạch trong 10-15 phút.",
+    "price_vnd": 49000,
+    "stock": 100
+  },
+  {
+    "id": "OA010",
+    "name": "Nước tẩy trang OA Micellar Water",
+    "category": "Tẩy trang",
+    "skin_types": ["mọi loại da"],
+    "ingredients": ["Micellar Technology", "Panthenol", "Nước hoa hồng"],
+    "benefits": ["Loại bỏ trang điểm nhẹ", "Làm sạch bụi bẩn"],
+    "usage": "Thấm vào bông cotton rồi lau nhẹ mặt và mắt.",
+    "price_vnd": 199000,
+    "stock": 55
+  }
+]
