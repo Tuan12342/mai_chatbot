@@ -13,7 +13,8 @@ START
       └── unknown → fallback → END
 ```
 
-LangGraph quản lý state và routing. LangChain được dùng qua message objects và `ChatOpenAI` trong node `assistant`.
+LangGraph quản lý state, routing và vòng lặp product tool. LangChain gọi Gemini trong node
+`assistant`.
 
 ## Cài đặt
 
@@ -37,7 +38,7 @@ Hoặc:
 python -m mai_agent.runner
 ```
 
-Mặc định `DEMO_MODE=true`, vì vậy chưa cần OpenAI API key.
+Trước khi chạy, thêm Gemini API key vào `GOOGLE_API_KEY` trong file `.env`.
 
 ## Chạy test
 

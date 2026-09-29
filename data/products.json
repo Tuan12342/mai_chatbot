@@ -44,6 +44,17 @@
     "stock": 28
   },
   {
+    "id": "OA011",
+    "name": "Serum phục hồi OA Barrier Repair Serum abc",
+    "category": "Serum",
+    "skin_types": ["da khô", "da nhạy cảm"],
+    "ingredients": ["Ceramide NP", "Panthenol 5%", "Squalane"],
+    "benefits": ["Hỗ trợ phục hồi hàng rào da", "Giảm khô căng"],
+    "usage": "Thoa 2-3 giọt sau toner vào sáng và tối.",
+    "price_vnd": 390000,
+    "stock": 28
+  },
+  {
     "id": "OA005",
     "name": "Serum làm sáng OA Brightening Serum",
     "category": "Serum",

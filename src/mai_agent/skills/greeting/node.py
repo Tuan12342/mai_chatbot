@@ -7,7 +7,6 @@ from mai_agent.state import AgentState
 
 def greeting_node(_: AgentState) -> dict[str, Any]:
     reply = (
-        "Chào bạn, mình là Mai của OA Cosmetics. "
-        "Mình có thể giúp bạn tìm hiểu sản phẩm hoặc tư vấn theo loại da."
+        "Chào bạn, mình là Mai. Mình có thể giúp bạn tìm hiểu sản phẩm hoặc tư vấn theo loại da."
     )
     return {"reply": reply, "messages": [AIMessage(content=reply)]}

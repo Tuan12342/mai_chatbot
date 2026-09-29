@@ -1,14 +1,15 @@
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from mai_agent.routing import classify_intent_node, fallback_node
 from mai_agent.skills.greeting import greeting_node
 from mai_agent.skills.order import order_node
-from mai_agent.skills.product import assistant_node
+from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node
 from mai_agent.state import AgentState
 
 
 def route_by_intent(state: AgentState) -> str:
-    intent = state.get("intent", "unknown")
+    intent = state.get("session", {}).get("current_intent", "unknown")
     if intent == "greeting":
         return "greeting"
     if intent == "order":
@@ -18,13 +19,14 @@ def route_by_intent(state: AgentState) -> str:
     return "fallback"
 
 
-def create_agent_graph():
+def create_agent_graph(*, checkpointer=None):
     """Tạo và compile LangGraph cho agent Mai."""
     builder = StateGraph(AgentState)
 
     builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("greeting", greeting_node)
     builder.add_node("assistant", assistant_node)
+    builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
     builder.add_node("order", order_node)
     builder.add_node("fallback", fallback_node)
 
@@ -40,8 +42,16 @@ def create_agent_graph():
         },
     )
     builder.add_edge("greeting", END)
-    builder.add_edge("assistant", END)
+    builder.add_conditional_edges(
+        "assistant",
+        tools_condition,
+        {
+            "tools": "product_tools",
+            "__end__": END,
+        },
+    )
+    builder.add_edge("product_tools", "assistant")
     builder.add_edge("order", END)
     builder.add_edge("fallback", END)
 
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)

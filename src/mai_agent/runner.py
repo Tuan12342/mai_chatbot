@@ -1,10 +1,13 @@
 from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import InMemorySaver
 
 from mai_agent.graph import create_agent_graph
 
 
 def main() -> None:
-    graph = create_agent_graph()
+    user_id = "local-user"
+    graph = create_agent_graph(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": user_id}}
     print("Mai đã sẵn sàng.")
 
     while True:
@@ -16,9 +19,10 @@ def main() -> None:
 
         result = graph.invoke(
             {
-                "user_id": "local-user",
+                "user_id": user_id,
                 "messages": [HumanMessage(content=text)],
-            }
+            },
+            config=config,
         )
         print(f"Mai: {result['reply']}\n")
 
