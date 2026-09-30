@@ -7,7 +7,6 @@ from mai_agent.config import get_settings
 
 @lru_cache
 def get_product_embeddings() -> GoogleGenerativeAIEmbeddings:
-    """Tạo Gemini Embedding client dùng chung cho product retrieval."""
     settings = get_settings()
 
     return GoogleGenerativeAIEmbeddings(

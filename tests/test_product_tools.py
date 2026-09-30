@@ -39,6 +39,22 @@ def test_check_product_stock_rejects_non_positive_quantity() -> None:
     }
 
 
+def test_partial_stock_does_not_suggest_alternatives() -> None:
+    result = check_product_stock.invoke(
+        {
+            "product_id": "OA004",
+            "quantity": 999,
+            "skin_type": "da dầu",
+            "excluded_ingredients": [],
+        }
+    )
+
+    assert result["available"] is False
+    assert result["status"] == "partial_stock"
+    assert result["current_stock"] == 28
+    assert result["alternatives"] == []
+
+
 def test_graph_contains_product_tool_node() -> None:
     graph = create_agent_graph()
 

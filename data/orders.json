@@ -1,0 +1,17 @@
+[
+  {
+    "order_id": "ORDER-001",
+    "customer_id": "zalo-user-001",
+    "status": "completed",
+    "payment_status": "paid",
+    "total_amount": 389000,
+    "items": [
+      {
+        "product_id": "OA004",
+        "product_name": "Serum phục hồi OA Barrier Repair Serum",
+        "quantity": 1,
+        "unit_price": 389000
+      }
+    ]
+  }
+]

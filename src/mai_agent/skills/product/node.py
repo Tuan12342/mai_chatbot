@@ -10,11 +10,14 @@ from mai_agent.state import AgentState
 
 
 def assistant_node(state: AgentState) -> dict[str, Any]:
-    """Gọi Gemini và giữ nguyên tool calls để LangGraph xử lý."""
     settings = get_settings()
-    if not settings.google_api_key:
-        raise RuntimeError("Thiếu GOOGLE_API_KEY để gọi Gemini.")
-
+    customer = state.get("customer", {})
+    profile_context = (
+        "Hồ sơ được hệ thống nạp cho đúng Zalo user hiện tại:\n"
+        f"- Loại da: {customer.get('skin_type', 'chưa biết')}\n"
+        f"- Thành phần cần loại trừ: {customer.get('excluded_ingredients', [])}\n"
+        "Không hỏi hoặc tự suy đoán Zalo user ID."
+    )
     model = ChatGoogleGenerativeAI(
         model=settings.google_model,
         api_key=settings.google_api_key,
@@ -29,6 +32,9 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             "độ phù hợp hoặc so sánh sản phẩm.\n"
             "- Dùng search_products khi cần tìm theo mã, tên hoặc danh mục.\n"
             "- Dùng check_product_stock khi hỏi tồn kho hoặc số lượng có thể mua.\n"
+            "  Khi thiếu hàng, truyền loại da và thành phần cần loại trừ từ hồ sơ trên "
+            "để nhận gợi ý thay thế.\n"
+            f"{profile_context}\n"
             "- Chỉ trả lời thông tin sản phẩm từ kết quả công cụ; không tự suy đoán."
         )
     )

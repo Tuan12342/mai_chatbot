@@ -1,8 +1,17 @@
+import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from mai_agent.graph import create_agent_graph
 from mai_agent.skills.order.tools import extract_order_request
+
+
+@pytest.fixture(autouse=True)
+def deterministic_order_replies(monkeypatch):
+    monkeypatch.setattr(
+        "mai_agent.skills.order.node._generate_order_reply",
+        lambda required_content: required_content,
+    )
 
 
 def _conversation():
@@ -73,7 +82,11 @@ def test_order_flow_collects_address_and_confirms_order() -> None:
     graph, config = _conversation()
 
     _invoke(graph, config, "Mua 2 OA004")
-    address_result = _invoke(graph, config, "123 Nguyễn Trãi, Quận 5, TP.HCM")
+    address_result = _invoke(
+        graph,
+        config,
+        "123 Nguyễn Trãi, Quận 5, TP.HCM, 0901234567",
+    )
     confirmed = _invoke(graph, config, "xác nhận")
 
     assert address_result["session"]["current_step"] == "confirming_order"
@@ -89,6 +102,22 @@ def test_order_rejects_quantity_above_stock() -> None:
 
     result = _invoke(graph, config, "Mua 999 OA004")
 
-    assert result["session"]["current_step"] == "collecting_quantity"
+    assert result["session"]["current_step"] == "confirming_partial_quantity"
     assert result["session"]["pending_product_id"] == "OA004"
-    assert "không đủ" in result["reply"].lower()
+    assert "28" in result["reply"]
+
+
+def test_customer_sees_alternative_details_before_quantity() -> None:
+    graph, config = _conversation()
+
+    offered = _invoke(graph, config, "Mua 1 OA001")
+    details = _invoke(graph, config, "có")
+    quantity = _invoke(graph, config, "5")
+
+    assert offered["session"]["current_step"] == "confirming_alternative"
+    assert details["session"]["current_step"] == "collecting_quantity"
+    assert "OA002" in details["reply"]
+    assert "219,000" in details["reply"]
+    assert quantity["session"]["current_step"] == "collecting_address"
+    assert quantity["session"]["cart"][0]["product_id"] == "OA002"
+    assert quantity["session"]["cart"][0]["quantity"] == 5

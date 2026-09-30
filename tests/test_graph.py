@@ -1,8 +1,17 @@
+import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from mai_agent.graph import create_agent_graph
 from mai_agent.routing import classify_intent_node
+
+
+@pytest.fixture(autouse=True)
+def deterministic_order_replies(monkeypatch):
+    monkeypatch.setattr(
+        "mai_agent.skills.order.node._generate_order_reply",
+        lambda required_content: required_content,
+    )
 
 
 def invoke(message: str):
@@ -30,9 +39,9 @@ def test_recommendation_route() -> None:
 def test_order_route() -> None:
     result = invoke("Tôi muốn mua serum")
     assert result["session"]["current_intent"] == "order"
-    assert result["session"]["current_step"] == "selecting_product"
+    assert result["session"]["current_step"] == "collecting_quantity"
     assert result["session"]["cart"] == []
-    assert "mã sản phẩm" in result["reply"]
+    assert "số lượng" in result["reply"]
 
 
 def test_unknown_route() -> None:

@@ -14,8 +14,6 @@ def main() -> None:
         text = input("Bạn: ").strip()
         if text.lower() in {"exit", "quit", "thoát"}:
             break
-        if not text:
-            continue
 
         result = graph.invoke(
             {

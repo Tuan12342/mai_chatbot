@@ -1,0 +1,12 @@
+[
+  {
+    "zalo_user_id": "zalo-user-001",
+    "name": "Lan",
+    "phone": "0901234567",
+    "skin_type": "da dầu",
+    "sensitivities": [],
+    "allergies": [],
+    "excluded_ingredients": ["Alcohol"],
+    "disliked_product_ids": []
+  }
+]

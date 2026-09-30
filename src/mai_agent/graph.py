@@ -4,6 +4,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from mai_agent.routing import classify_intent_node, fallback_node
 from mai_agent.skills.greeting import greeting_node
 from mai_agent.skills.order import order_node
+from mai_agent.skills.order_lookup import order_lookup_node
 from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node
 from mai_agent.state import AgentState
 
@@ -14,6 +15,8 @@ def route_by_intent(state: AgentState) -> str:
         return "greeting"
     if intent == "order":
         return "order"
+    if intent == "order_lookup":
+        return "order_lookup"
     if intent in {"product_question", "recommendation"}:
         return "assistant"
     return "fallback"
@@ -28,6 +31,7 @@ def create_agent_graph(*, checkpointer=None):
     builder.add_node("assistant", assistant_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
     builder.add_node("order", order_node)
+    builder.add_node("order_lookup", order_lookup_node)
     builder.add_node("fallback", fallback_node)
 
     builder.add_edge(START, "classify_intent")
@@ -38,6 +42,7 @@ def create_agent_graph(*, checkpointer=None):
             "greeting": "greeting",
             "assistant": "assistant",
             "order": "order",
+            "order_lookup": "order_lookup",
             "fallback": "fallback",
         },
     )
@@ -52,6 +57,7 @@ def create_agent_graph(*, checkpointer=None):
     )
     builder.add_edge("product_tools", "assistant")
     builder.add_edge("order", END)
+    builder.add_edge("order_lookup", END)
     builder.add_edge("fallback", END)
 
     return builder.compile(checkpointer=checkpointer)

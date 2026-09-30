@@ -3,6 +3,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from mai_agent.customer_store import find_customer_by_zalo_id
 from mai_agent.state import AgentState, Intent, SessionState
 
 
@@ -14,14 +15,27 @@ def latest_user_text(state: AgentState) -> str:
     return ""
 
 
-def classify_intent_node(state: AgentState) -> dict[str, SessionState]:
-    """Phân loại intent ban đầu bằng luật đơn giản, dễ kiểm thử."""
+def classify_intent_node(state: AgentState) -> dict[str, Any]:
     text = latest_user_text(state).lower()
     session = state.get("session", {})
-    if session.get("current_step", "idle") != "idle":
+    if session.get("current_step") == "verifying_order_lookup":
+        intent: Intent = "order_lookup"
+    elif session.get("current_step", "idle") != "idle":
         intent: Intent = "order"
     elif any(word in text for word in ["xin chào", "chào", "hello", "hi"]):
         intent: Intent = "greeting"
+    elif any(
+        phrase in text
+        for phrase in [
+            "tra đơn",
+            "đơn cũ",
+            "đơn của tôi",
+            "đơn của mình",
+            "kiểm tra đơn hàng",
+            "đơn đang giao",
+        ]
+    ):
+        intent = "order_lookup"
     elif any(word in text for word in ["mua", "đặt", "chốt đơn", "order"]):
         intent = "order"
     elif any(word in text for word in ["tư vấn", "gợi ý", "phù hợp", "recommend"]):
@@ -52,7 +66,11 @@ def classify_intent_node(state: AgentState) -> dict[str, SessionState]:
         "current_step": session.get("current_step", "idle"),
         "cart": session.get("cart", []),
     }
-    return {"session": session_update}
+    update: dict[str, Any] = {"session": session_update}
+    customer = find_customer_by_zalo_id(state.get("user_id", ""))
+    if customer is not None:
+        update["customer"] = customer
+    return update
 
 
 def fallback_node(_: AgentState) -> dict[str, Any]:

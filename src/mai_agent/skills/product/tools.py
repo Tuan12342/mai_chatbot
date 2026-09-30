@@ -3,7 +3,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from mai_agent.catalog import find_product, load_products
+from mai_agent.catalog import find_alternative_products, find_product, load_products
 from mai_agent.skills.product.vector_store import (
     get_product_vector_store,
     resolve_product_references,
@@ -41,7 +41,12 @@ def search_products(keyword: str) -> list[dict[str, Any]]:
 
 
 @tool
-def check_product_stock(product_id: str, quantity: int) -> dict[str, Any]:
+def check_product_stock(
+    product_id: str,
+    quantity: int,
+    skin_type: str | None = None,
+    excluded_ingredients: list[str] | None = None,
+) -> dict[str, Any]:
     """Kiểm tra sản phẩm có tồn tại và còn đủ số lượng để bán hay không."""
 
     if quantity <= 0:
@@ -50,19 +55,38 @@ def check_product_stock(product_id: str, quantity: int) -> dict[str, Any]:
     product = find_product(product_id)
     if product is None:
         return {"available": False, "reason": "Không tìm thấy sản phẩm."}
-    if product["stock"] < quantity:
+    if product["stock"] >= quantity:
         return {
-            "available": False,
-            "reason": "Không đủ trong kho.",
-            "current_stock": product["stock"],
+            "status": "available",
+            "available": True,
+            "product_id": product["id"],
+            "product_name": product["name"],
+            "quantity": quantity,
+            "unit_price": product["price_vnd"],
+            "subtotal": product["price_vnd"] * quantity,
         }
+
+    if product["stock"] > 0:
+        return {
+            "status": "partial_stock",
+            "available": False,
+            "reason": "Không đủ số lượng yêu cầu.",
+            "requested_quantity": quantity,
+            "current_stock": product["stock"],
+            "alternatives": [],
+        }
+
     return {
-        "available": True,
-        "product_id": product["id"],
-        "product_name": product["name"],
-        "quantity": quantity,
-        "unit_price": product["price_vnd"],
-        "subtotal": product["price_vnd"] * quantity,
+        "status": "out_of_stock",
+        "available": False,
+        "reason": "Sản phẩm đã hết hàng.",
+        "requested_quantity": quantity,
+        "current_stock": 0,
+        "alternatives": find_alternative_products(
+            product_id,
+            skin_type=skin_type,
+            excluded_ingredients=excluded_ingredients,
+        ),
     }
 
 
