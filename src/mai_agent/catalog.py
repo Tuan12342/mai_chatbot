@@ -27,7 +27,7 @@ def find_alternative_products(
     *,
     skin_type: str | None = None,
     excluded_ingredients: list[str] | None = None,
-    limit = 2,
+    limit = 5,
 ) -> list[dict[str, Any]]:
     """Tìm sản phẩm cùng danh mục, còn hàng và phù hợp hồ sơ da."""
     unavailable_product = find_product(product_id)

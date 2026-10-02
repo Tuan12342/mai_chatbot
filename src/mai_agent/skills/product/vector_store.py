@@ -169,7 +169,7 @@ class ProductVectorStore:
         query: str,
         *,
         product_ids: list[str] | None = None,
-        top_k: int = 6,
+        top_k: int = 3,
     ) -> list[SearchResult]:
         normalized_query = query.strip()
         if not normalized_query or top_k <= 0:

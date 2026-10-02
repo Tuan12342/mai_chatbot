@@ -2,7 +2,6 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from mai_agent.routing import classify_intent_node, fallback_node
-from mai_agent.skills.greeting import greeting_node
 from mai_agent.skills.order import order_node
 from mai_agent.skills.order_lookup import order_lookup_node
 from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node
@@ -11,8 +10,6 @@ from mai_agent.state import AgentState
 
 def route_by_intent(state: AgentState) -> str:
     intent = state.get("session", {}).get("current_intent", "unknown")
-    if intent == "greeting":
-        return "greeting"
     if intent == "order":
         return "order"
     if intent == "order_lookup":
@@ -27,7 +24,6 @@ def create_agent_graph(*, checkpointer=None):
     builder = StateGraph(AgentState)
 
     builder.add_node("classify_intent", classify_intent_node)
-    builder.add_node("greeting", greeting_node)
     builder.add_node("assistant", assistant_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
     builder.add_node("order", order_node)
@@ -39,14 +35,12 @@ def create_agent_graph(*, checkpointer=None):
         "classify_intent",
         route_by_intent,
         {
-            "greeting": "greeting",
             "assistant": "assistant",
             "order": "order",
             "order_lookup": "order_lookup",
             "fallback": "fallback",
         },
     )
-    builder.add_edge("greeting", END)
     builder.add_conditional_edges(
         "assistant",
         tools_condition,

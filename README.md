@@ -7,7 +7,6 @@ Folder này chỉ chứa lõi agent đầu tiên. Chưa có MongoDB, FastAPI, RA
 ```text
 START
   → classify_intent
-      ├── greeting → greeting → END
       ├── product_question/recommendation → assistant → END
       ├── order → order → END
       └── unknown → fallback → END

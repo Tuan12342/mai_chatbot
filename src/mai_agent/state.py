@@ -3,7 +3,13 @@ from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-Intent = Literal["greeting", "product_question", "recommendation", "order", "unknown"]
+Intent = Literal[
+    "product_question",
+    "recommendation",
+    "order",
+    "order_lookup",
+    "unknown",
+]
 
 ConversationStep = Literal[
     "idle",
@@ -12,6 +18,7 @@ ConversationStep = Literal[
     "confirming_alternative",
     "confirming_partial_quantity",
     "collecting_address",
+    "confirming_cart_revision",
     "confirming_order",
     "verifying_order_lookup",
 ]
@@ -65,7 +72,13 @@ class SessionState(TypedDict, total=False):
     pending_product_id: str | None
     pending_product_reference: str | None
     pending_product_candidates: list[ProductCandidate]
+    last_product_candidates: list[ProductCandidate]
     pending_quantity: int | None
+    pending_order_items: list[dict[str, Any]]
+    pending_cart_revision: list[CartItem]
+    cart_revision_reason: str | None
+    pending_revised_shipping_address: str | None
+    pending_revised_phone: str | None
     pending_shipping_address: str | None
     pending_phone: str | None
     pending_available_quantity: int | None

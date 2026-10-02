@@ -3,6 +3,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 
+from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
 from mai_agent.skills.order_lookup.tools import (
     lookup_verified_customer_orders,
@@ -14,9 +15,10 @@ MAX_VERIFICATION_ATTEMPTS = 3
 
 
 def _reply(text: str, session: dict[str, Any]) -> dict[str, Any]:
+    rendered_text = generate_reply(text)
     return {
-        "reply": text,
-        "messages": [AIMessage(content=text)],
+        "reply": rendered_text,
+        "messages": [AIMessage(content=rendered_text)],
         "session": session,
     }
 

@@ -12,8 +12,7 @@ def main() -> None:
 
     while True:
         text = input("Bạn: ").strip()
-        if text.lower() in {"exit", "quit", "thoát"}:
-            break
+
 
         result = graph.invoke(
             {
