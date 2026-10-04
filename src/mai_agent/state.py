@@ -11,6 +11,8 @@ Intent = Literal[
     "unknown",
 ]
 
+HandoffStatus = Literal["none", "requested", "active", "resolved"]
+
 ConversationStep = Literal[
     "idle",
     "selecting_product",
@@ -82,6 +84,11 @@ class SessionState(TypedDict, total=False):
     pending_shipping_address: str | None
     pending_phone: str | None
     pending_available_quantity: int | None
+    handoff_status: HandoffStatus
+    handoff_reason: str | None
+    handoff_trigger: str | None
+    handoff_package: dict[str, Any]
+    handoff_resolution_summary: str | None
 
 
 class CustomerProfile(TypedDict, total=False):
@@ -117,6 +124,7 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     user_id: str
     reply: str
+    response_owner: Literal["ai", "human"]
     session: Annotated[SessionState, merge_mapping]
 
     # Các bản chụp được nạp từ kho dữ liệu lâu dài khi cần.

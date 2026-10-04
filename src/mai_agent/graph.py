@@ -1,6 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from mai_agent.handoff import handoff_guard_node, handoff_node
 from mai_agent.routing import classify_intent_node, fallback_node
 from mai_agent.skills.order import order_node
 from mai_agent.skills.order_lookup import order_lookup_node
@@ -19,10 +20,21 @@ def route_by_intent(state: AgentState) -> str:
     return "fallback"
 
 
+def route_after_handoff_guard(state: AgentState) -> str:
+    status = state.get("session", {}).get("handoff_status", "none")
+    if status == "requested":
+        return "handoff"
+    if status == "active":
+        return "human_active"
+    return "classify_intent"
+
+
 def create_agent_graph(*, checkpointer=None):
     """Tạo và compile LangGraph cho agent Mai."""
     builder = StateGraph(AgentState)
 
+    builder.add_node("handoff_guard", handoff_guard_node)
+    builder.add_node("handoff", handoff_node)
     builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("assistant", assistant_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
@@ -30,7 +42,17 @@ def create_agent_graph(*, checkpointer=None):
     builder.add_node("order_lookup", order_lookup_node)
     builder.add_node("fallback", fallback_node)
 
-    builder.add_edge(START, "classify_intent")
+    builder.add_edge(START, "handoff_guard")
+    builder.add_conditional_edges(
+        "handoff_guard",
+        route_after_handoff_guard,
+        {
+            "handoff": "handoff",
+            "human_active": END,
+            "classify_intent": "classify_intent",
+        },
+    )
+    builder.add_edge("handoff", END)
     builder.add_conditional_edges(
         "classify_intent",
         route_by_intent,

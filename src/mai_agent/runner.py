@@ -13,7 +13,6 @@ def main() -> None:
     while True:
         text = input("Bạn: ").strip()
 
-
         result = graph.invoke(
             {
                 "user_id": user_id,
@@ -21,7 +20,10 @@ def main() -> None:
             },
             config=config,
         )
-        print(f"Mai: {result['reply']}\n")
+        if result.get("reply"):
+            print(f"Mai: {result['reply']}\n")
+        elif result.get("response_owner") == "human":
+            print("[Hội thoại đang do nhân viên xử lý; bot không tự động trả lời.]\n")
 
 
 if __name__ == "__main__":

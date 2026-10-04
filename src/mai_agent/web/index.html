@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mai Agent — Handoff Lab</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">M</div>
+          <div>
+            <p class="eyebrow">OA COSMETICS</p>
+            <h1>Mai Handoff Lab</h1>
+          </div>
+        </div>
+        <div class="top-actions">
+          <div id="statusBadge" class="status-badge status-ai">
+            <span class="status-dot"></span>
+            <span id="statusText">Mai đang trả lời</span>
+          </div>
+          <button id="newSessionButton" class="button button-quiet">Phiên mới</button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <article class="panel customer-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">GÓC NHÌN KHÁCH HÀNG</p>
+              <h2>Hội thoại với Mai</h2>
+            </div>
+            <div class="avatar">K</div>
+          </div>
+
+          <div id="chat" class="chat" aria-live="polite">
+            <div id="emptyChat" class="empty-chat">
+              <div class="sparkle">✦</div>
+              <h3>Bắt đầu một tình huống</h3>
+              <p>Hỏi sản phẩm bình thường, phàn nàn lặp lại hoặc yêu cầu gặp nhân viên.</p>
+            </div>
+          </div>
+
+          <form id="customerForm" class="composer">
+            <textarea
+              id="customerInput"
+              rows="2"
+              maxlength="4000"
+              placeholder="Nhập tin nhắn của khách…"
+              required
+            ></textarea>
+            <button id="customerSend" class="button button-primary" type="submit">
+              Gửi <span aria-hidden="true">↗</span>
+            </button>
+          </form>
+          <p class="hint">Enter để gửi · Shift + Enter để xuống dòng</p>
+        </article>
+
+      </section>
+      <div id="errorBox" class="error-box page-error" hidden></div>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
