@@ -1,6 +1,6 @@
 from typing import Any
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from mai_agent.config import get_settings
@@ -27,7 +27,6 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         content=(
             f"{SYSTEM_PROMPT}\n\n"
             "Quy tắc sử dụng công cụ:\n"
-            "- Dùng resolve_product_names khi tên sản phẩm bị viết tắt, sai nhẹ hoặc mơ hồ.\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
             "độ phù hợp hoặc so sánh sản phẩm.\n"
             "- Dùng search_products khi cần tìm theo mã, tên hoặc danh mục.\n"
@@ -39,8 +38,6 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         )
     )
     response = model_with_tools.invoke([system_message, *state.get("messages", [])])
-    if not isinstance(response, AIMessage):
-        response = AIMessage(content=str(response))
 
     # Lượt yêu cầu tool thường chưa có nội dung trả lời. Giữ nguyên AIMessage
     # để tools_condition đọc được response.tool_calls.

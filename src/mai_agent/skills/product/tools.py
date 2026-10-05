@@ -90,14 +90,6 @@ def check_product_stock(
     }
 
 
-@tool
-def resolve_product_names(references: list[str]) -> dict[str, list[Any]]:
-    """Chuẩn hóa mã/tên sản phẩm, kể cả khi khách gõ thiếu hoặc sai nhẹ.
-
-    Luôn dùng trước khi truy xuất nếu khách nêu tên sản phẩm không phải mã SKU chính xác.
-    """
-    return resolve_product_references(references)
-
 
 @tool
 def search_product_knowledge(
@@ -146,7 +138,6 @@ def search_product_knowledge(
 
 PRODUCT_TOOLS = [
     search_products,
-    resolve_product_names,
     search_product_knowledge,
     check_product_stock,
 ]

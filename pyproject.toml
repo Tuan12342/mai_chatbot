@@ -9,6 +9,8 @@ dependencies = [
   "langchain-google-genai>=4.0,<5.0",
   "pydantic-settings>=2.10,<3.0",
   "python-dotenv>=1.1,<2.0",
+  "fastapi>=0.115,<1.0",
+  "uvicorn>=0.34,<1.0",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +21,7 @@ dev = [
 
 [project.scripts]
 mai-agent = "mai_agent.runner:main"
+mai-agent-web = "mai_agent.api:main"
 
 [build-system]
 requires = ["setuptools>=80"]
@@ -26,6 +29,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"mai_agent.web" = ["*.html"]
 
 [tool.ruff]
 line-length = 100

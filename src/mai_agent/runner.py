@@ -21,7 +21,9 @@ def main() -> None:
             },
             config=config,
         )
-        print(f"Mai: {result['reply']}\n")
+        reply = result.get("reply", "")
+        if reply:
+            print(f"Mai: {reply}\n")
 
 
 if __name__ == "__main__":

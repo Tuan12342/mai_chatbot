@@ -212,9 +212,17 @@ def confirm_cart_revision() -> str:
 
 
 @tool
-def revise_cart_again(changes: list[CartChange]) -> list[dict[str, Any]]:
-    """Khách chưa đồng ý và cung cấp thêm thay đổi cho giỏ hàng nháp."""
-    return [change.model_dump() for change in changes]
+def revise_cart_again(
+    changes: list[CartChange] | None = None,
+    address: str = "",
+    phone: str = "",
+) -> dict[str, Any]:
+    """Khách muốn sửa thêm giỏ hàng, địa chỉ và/hoặc số điện thoại."""
+    return {
+        "changes": [change.model_dump() for change in changes or []],
+        "address": address,
+        "phone": phone,
+    }
 
 
 @tool
@@ -684,6 +692,14 @@ def _is_valid_shipping_address(address: str) -> bool:
     return len(letters) >= 3
 
 
+def _normalize_phone(phone: str) -> str | None:
+    """Chuẩn hóa cách viết phổ biến và chỉ nhận số điện thoại hợp lệ."""
+    normalized = re.sub(r"[\s.()-]+", "", phone.strip())
+    if re.fullmatch(r"(?:\+?84|0)\d{8,9}", normalized):
+        return normalized
+    return None
+
+
 def _interpret_cart_revision_confirmation(
     text: str,
     original_cart: list[dict[str, Any]],
@@ -698,10 +714,14 @@ def _interpret_cart_revision_confirmation(
         [
             SystemMessage(
                 content=(
-                    "Khách đang xác nhận giỏ hàng sau khi sửa. Bắt buộc gọi "
-                    "confirm_cart_revision nếu đồng ý; revise_cart_again nếu muốn "
-                    "sửa thêm và phải truyền đầy đủ changes; discard_cart_revision "
-                    "nếu muốn bỏ bản sửa để giữ giỏ cũ. Không tự trả lời khách."
+                    "Khách đang xem lại toàn bộ đơn sau khi sửa. Chỉ gọi "
+                    "confirm_cart_revision khi khách đồng ý toàn bộ thông tin. "
+                    "Gọi revise_cart_again khi khách muốn sửa thêm sản phẩm, "
+                    "số lượng, địa chỉ hoặc số điện thoại. Chỉ điền các "
+                    "trường khách thực sự cung cấp; nếu không sửa sản phẩm thì "
+                    "changes là danh sách rỗng. Không được coi yêu cầu sửa là "
+                    "xác nhận. Gọi discard_cart_revision nếu khách muốn bỏ "
+                    "bản sửa để giữ giỏ cũ. Không tự trả lời khách."
                 )
             ),
             HumanMessage(
@@ -720,7 +740,12 @@ def _interpret_cart_revision_confirmation(
     if call["name"] == "discard_cart_revision":
         return {"action": "discard"}
     if call["name"] == "revise_cart_again":
-        return {"action": "revise", "changes": call["args"].get("changes", [])}
+        return {
+            "action": "revise",
+            "changes": call["args"].get("changes", []),
+            "address": call["args"].get("address", ""),
+            "phone": call["args"].get("phone", ""),
+        }
     raise RuntimeError(f"Gemini gọi tool không được hỗ trợ: {call['name']}")
 
 
@@ -1001,14 +1026,42 @@ def order_node(state: AgentState) -> dict[str, Any]:
                     "pending_revised_phone": None,
                 },
             )
+
+        supplied_address = " ".join(
+            str(revision_action.get("address", "")).split()
+        )
+        supplied_phone_text = str(revision_action.get("phone", ""))
+        if supplied_address and not _is_valid_shipping_address(supplied_address):
+            return _reply(
+                "Địa chỉ mới không hợp lệ. Hỏi khách cung cấp lại địa "
+                "chỉ giao hàng có tên đường hoặc khu vực. Không áp dụng "
+                "bất kỳ thay đổi nào và chưa xác nhận đơn.",
+                {**session, "current_step": "confirming_cart_revision"},
+            )
+
+        supplied_phone = (
+            _normalize_phone(supplied_phone_text) if supplied_phone_text.strip() else None
+        )
+        if supplied_phone_text.strip() and supplied_phone is None:
+            return _reply(
+                "Số điện thoại mới không hợp lệ. Hỏi khách cung cấp "
+                "lại số điện thoại hợp lệ. Không áp dụng bất kỳ thay "
+                "đổi nào và chưa xác nhận đơn.",
+                {**session, "current_step": "confirming_cart_revision"},
+            )
+
+        revised_address = supplied_address or session.get(
+            "pending_revised_shipping_address"
+        )
+        revised_phone = supplied_phone or session.get("pending_revised_phone")
         return _prepare_cart_revision(
             state,
             original_cart=cart,
             base_cart=revised_cart,
             changes=revision_action["changes"],
             reason=text,
-            revised_address=session.get("pending_revised_shipping_address"),
-            revised_phone=session.get("pending_revised_phone"),
+            revised_address=revised_address,
+            revised_phone=revised_phone,
         )
 
     if current_step == "collecting_address":
@@ -1042,7 +1095,7 @@ def order_node(state: AgentState) -> dict[str, Any]:
             str(address_action.get("address", "")).split()
         )
         phone_text = str(address_action.get("phone", ""))
-        phone_match = re.fullmatch(r"(?:\+?84|0)\d{9,10}", phone_text)
+        phone_match = re.fullmatch(r"(?:\+?84|0)\d{8,9}", phone_text)
         supplied_phone = phone_match.group(0) if phone_match else None
 
         saved_address = str(session.get("pending_shipping_address") or "")

@@ -1,6 +1,32 @@
 # Mai Agent với LangChain và LangGraph
 
-Folder này chỉ chứa lõi agent đầu tiên. Chưa có MongoDB, FastAPI, RAG, giỏ hàng hay giao diện.
+Folder này chứa lõi agent Mai dùng LangGraph và Gemini.
+
+## Chạy giao diện web
+
+```bash
+uv sync
+uv run mai-agent-web
+```
+
+Mở `http://127.0.0.1:8000`. Giao diện thử nghiệm dùng một người dùng cố định và chưa có
+đăng nhập; lịch sử được giữ trong RAM khi server còn chạy.
+
+Nếu port 8000 đang được dùng:
+
+```bash
+MAI_AGENT_WEB_PORT=8765 uv run mai-agent-web
+```
+
+## Human handoff
+
+Gemini đánh giá ngữ nghĩa của tin nhắn trước khi router nghiệp vụ chạy, không dò danh sách
+từ khóa cố định. Hệ thống chuyển người thật khi khách yêu cầu trực tiếp, thể hiện tiêu cực
+mạnh, hoặc lặp lại cùng loại phàn nàn chưa được giải quyết từ hai lần. Context package được
+lưu tại `data/handoffs.json`, gồm lịch sử hội thoại, giỏ hàng, đơn liên quan và lý do khách
+bức xúc. Mai sau đó tạm dừng phản hồi để không chồng chéo với người thật và kiểm tra trạng
+thái handoff ở các tin nhắn tiếp theo để biết khi nào được resume. Giao diện quản trị sẽ
+được bổ sung ở giai đoạn sau.
 
 ## Luồng graph
 

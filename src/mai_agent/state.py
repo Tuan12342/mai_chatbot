@@ -39,6 +39,15 @@ PaymentStatus = Literal[
     "refunded",
 ]
 
+HandoffStatus = Literal[
+    "inactive",
+    "waiting_for_human",
+    "human_active",
+    "resolved",
+]
+
+HandoffAction = Literal["continue", "create", "wait"]
+
 
 class CartItem(TypedDict):
     product_id: str
@@ -106,6 +115,19 @@ class OrderState(TypedDict, total=False):
     cancel_reason: str
 
 
+class HandoffState(TypedDict, total=False):
+    handoff_id: str
+    status: HandoffStatus
+    issue_type: str
+    reason: str
+    severity: str
+    complaint_count: int
+    complaint_counts: dict[str, int]
+    created_at: str
+    assigned_to: str
+    resolution_summary: str
+
+
 def merge_mapping(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     """Gộp cập nhật từng phần mà không làm mất các trường state cùng tầng."""
     return {**left, **right}
@@ -122,3 +144,5 @@ class AgentState(TypedDict, total=False):
     # Các bản chụp được nạp từ kho dữ liệu lâu dài khi cần.
     customer: Annotated[CustomerProfile, merge_mapping]
     active_order: Annotated[OrderState, merge_mapping]
+    handoff: Annotated[HandoffState, merge_mapping]
+    handoff_action: HandoffAction

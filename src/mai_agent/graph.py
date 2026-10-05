@@ -2,6 +2,12 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from mai_agent.routing import classify_intent_node, fallback_node
+from mai_agent.skills.handoff import (
+    create_handoff_node,
+    handoff_guard_node,
+    human_wait_node,
+    route_handoff,
+)
 from mai_agent.skills.order import order_node
 from mai_agent.skills.order_lookup import order_lookup_node
 from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node
@@ -23,6 +29,9 @@ def create_agent_graph(*, checkpointer=None):
     """Tạo và compile LangGraph cho agent Mai."""
     builder = StateGraph(AgentState)
 
+    builder.add_node("handoff_guard", handoff_guard_node)
+    builder.add_node("create_handoff", create_handoff_node)
+    builder.add_node("human_wait", human_wait_node)
     builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("assistant", assistant_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
@@ -30,7 +39,18 @@ def create_agent_graph(*, checkpointer=None):
     builder.add_node("order_lookup", order_lookup_node)
     builder.add_node("fallback", fallback_node)
 
-    builder.add_edge(START, "classify_intent")
+    builder.add_edge(START, "handoff_guard")
+    builder.add_conditional_edges(
+        "handoff_guard",
+        route_handoff,
+        {
+            "create": "create_handoff",
+            "wait": "human_wait",
+            "continue": "classify_intent",
+        },
+    )
+    builder.add_edge("create_handoff", END)
+    builder.add_edge("human_wait", END)
     builder.add_conditional_edges(
         "classify_intent",
         route_by_intent,

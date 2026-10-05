@@ -42,6 +42,7 @@ def resolve_order_product(reference: str) -> ProductResolution:
         candidate = {"product_id": exact_name["id"], "product_name": exact_name["name"]}
         return {"status": "resolved", "product": candidate, "candidates": [candidate]}
 
+    # Tìm theo tên hoặc danh mục
     matches = [
         {"product_id": item["id"], "product_name": item["name"]}
         for item in products

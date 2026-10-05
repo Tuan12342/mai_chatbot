@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#a62e50">
+  <title>Mai · OA Cosmetics</title>
+  <style>
+    :root { --brand:#a62e50; --brand-dark:#84203e; --page:#f2e4e5; --border:#eadadd; --text:#31272a; --muted:#85777b; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; }
+    body { margin:0; padding:5px 26px 5px 7px; background:var(--page); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    button,textarea { font:inherit; }
+    .chat { position:relative; width:100%; height:100%; min-height:520px; display:grid; grid-template-rows:auto 1fr auto; overflow:hidden; border-radius:0 28px 28px 0; background:rgba(255,250,250,.96); box-shadow:0 18px 50px rgba(96,35,53,.08); }
+    .chat::before { content:""; position:absolute; inset:0 auto 0 0; width:7px; background:linear-gradient(#b13d60,#84203e); }
+    .header { min-height:88px; padding:20px 30px 18px 35px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid var(--border); }
+    .agent { display:flex; align-items:center; gap:13px; }
+    .avatar { width:46px; height:46px; display:grid; place-items:center; flex:0 0 auto; border:1px solid #e8b8c7; border-radius:15px; background:linear-gradient(145deg,#f7dce4,#efcbd6); color:#79233d; font:21px Georgia,serif; }
+    .agent h1 { margin:0 0 3px; font-size:16px; }
+    .agent p { margin:0; color:var(--muted); font-size:12px; }
+    .status { padding:7px 12px; border:1px solid var(--border); border-radius:999px; background:rgba(255,255,255,.75); color:var(--muted); font-size:11px; }
+    .status.handoff { border-color:#e5c37d; background:#fff6df; color:#7a5518; }
+    .messages { min-height:0; padding:25px 29px 18px 34px; overflow-y:auto; scroll-behavior:smooth; }
+    .message { display:flex; margin-bottom:16px; animation:appear 180ms ease both; }
+    .message.user { justify-content:flex-end; }
+    .bubble { max-width:min(70%,650px); padding:12px 15px; border-radius:17px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.55; }
+    .message.assistant .bubble { border:1px solid var(--border); border-bottom-left-radius:5px; background:#fff; box-shadow:0 8px 25px rgba(77,41,51,.045); }
+    .message.user .bubble { border-bottom-right-radius:5px; background:var(--brand); color:#fff; }
+    .typing-dots { display:inline-flex; gap:4px; padding:3px 0; }
+    .typing-dots span { width:6px; height:6px; border-radius:50%; background:#b59da4; animation:blink 800ms infinite alternate; }
+    .typing-dots span:nth-child(2) { animation-delay:150ms; }
+    .typing-dots span:nth-child(3) { animation-delay:300ms; }
+    .composer-area { padding:9px 24px 20px 31px; }
+    .composer { display:grid; grid-template-columns:1fr auto; align-items:end; gap:10px; padding:9px 9px 9px 18px; border:1px solid var(--border); border-radius:19px; background:#fff; box-shadow:0 14px 36px rgba(82,39,51,.08); }
+    textarea { width:100%; max-height:130px; resize:none; border:0; outline:0; background:transparent; color:var(--text); line-height:1.5; }
+    textarea::placeholder { color:#b4a5aa; }
+    .send { width:42px; height:42px; border:0; border-radius:14px; background:var(--brand); color:#fff; cursor:pointer; font-size:18px; transition:150ms ease; }
+    .send:hover { background:var(--brand-dark); }
+    .send:disabled { cursor:not-allowed; opacity:.45; }
+    .hint { margin-top:8px; color:#9f9095; text-align:center; font-size:10px; }
+    @keyframes appear { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes blink { from { opacity:.25; } to { opacity:1; } }
+    @media (max-width:680px) {
+      body { padding:0; }
+      .chat { min-height:100%; border-radius:0; }
+      .chat::before { display:none; }
+      .header { min-height:76px; padding:14px 16px; }
+      .messages { padding:19px 14px 10px; }
+      .composer-area { padding:8px 11px 13px; }
+      .bubble { max-width:88%; }
+      .status { max-width:112px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    }
+  </style>
+</head>
+<body>
+  <main class="chat">
+    <header class="header">
+      <div class="agent">
+        <div class="avatar">M</div>
+        <div><h1>Mai</h1><p>Trợ lý OA Cosmetics</p></div>
+      </div>
+      <span class="status" id="status">Sẵn sàng</span>
+    </header>
+
+    <section class="messages" id="messages" aria-live="polite"></section>
+
+    <footer class="composer-area">
+      <form class="composer" id="chat-form">
+        <textarea id="input" rows="1" maxlength="4000" placeholder="Nhắn tin cho Mai…" aria-label="Tin nhắn"></textarea>
+        <button class="send" id="send" type="submit" aria-label="Gửi tin nhắn">↑</button>
+      </form>
+      <div class="hint">Enter để gửi · Shift + Enter để xuống dòng</div>
+    </footer>
+  </main>
+
+  <script>
+    const messages=document.querySelector("#messages");
+    const form=document.querySelector("#chat-form");
+    const input=document.querySelector("#input");
+    const send=document.querySelector("#send");
+    const status=document.querySelector("#status");
+    let busy=false;
+
+    function scrollToBottom(){ messages.scrollTop=messages.scrollHeight; }
+    function addMessage(role,content){
+      if(!content)return;
+      const row=document.createElement("div"); row.className=`message ${role}`;
+      const bubble=document.createElement("div"); bubble.className="bubble"; bubble.textContent=content;
+      row.appendChild(bubble); messages.appendChild(row); scrollToBottom();
+    }
+    function addTyping(){
+      const row=document.createElement("div"); row.className="message assistant";
+      row.innerHTML='<div class="bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div>';
+      messages.appendChild(row); scrollToBottom(); return row;
+    }
+    function resizeInput(){ input.style.height="auto"; input.style.height=`${Math.min(input.scrollHeight,130)}px`; }
+    function setBusy(value){ busy=value; input.disabled=value; send.disabled=value; }
+    function updateStatus(data){
+      const waiting=["waiting_for_human","human_active"].includes(data.handoff_status);
+      status.classList.toggle("handoff",waiting);
+      status.textContent=waiting?"Đang chờ người thật":data.current_step==="idle"?"Sẵn sàng":data.current_step;
+    }
+    async function sendMessage(text){
+      const clean=text.trim(); if(!clean||busy)return;
+      addMessage("user",clean); input.value=""; resizeInput(); setBusy(true);
+      const typing=addTyping();
+      try{
+        const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:clean})});
+        const data=await response.json(); typing.remove();
+        if(!response.ok)throw new Error(data.detail||"Không thể gửi tin nhắn.");
+        if(data.reply)addMessage("assistant",data.reply); updateStatus(data);
+      }catch(error){ typing.remove(); addMessage("assistant",error.message||"Có lỗi xảy ra. Vui lòng thử lại."); }
+      finally{ setBusy(false); input.focus(); }
+    }
+    form.addEventListener("submit",event=>{ event.preventDefault(); sendMessage(input.value); });
+    input.addEventListener("input",resizeInput);
+    input.addEventListener("keydown",event=>{ if(event.key==="Enter"&&!event.shiftKey){ event.preventDefault(); form.requestSubmit(); } });
+    async function loadHistory(){
+      try{ const response=await fetch("/api/history"); if(!response.ok)return; const history=await response.json(); history.forEach(message=>addMessage(message.role,message.content)); }
+      catch(_){ /* Không có lịch sử thì giữ vùng chat trống. */ }
+    }
+    loadHistory(); input.focus();
+  </script>
+</body>
+</html>
