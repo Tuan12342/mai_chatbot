@@ -48,6 +48,18 @@ def route_unknown() -> str:
     return "unknown"
 
 
+@tool
+def route_in_scope() -> str:
+    """Tin nhắn thuộc phạm vi mỹ phẩm, chăm sóc da, mua hàng hoặc đơn hàng."""
+    return "in_scope"
+
+
+@tool
+def route_out_of_scope() -> str:
+    """Tin nhắn không thuộc phạm vi hỗ trợ của OA Cosmetics."""
+    return "out_of_scope"
+
+
 ROUTING_TOOLS = [
     route_order,
     route_order_lookup,
@@ -55,6 +67,51 @@ ROUTING_TOOLS = [
     route_product_question,
     route_unknown,
 ]
+
+SCOPE_TOOLS = [route_in_scope, route_out_of_scope]
+
+
+def _is_out_of_scope(text: str, current_step: str) -> bool:
+    """Dùng Gemini chặn yêu cầu ngoài phạm vi trước khi phân luồng."""
+    settings = get_settings()
+    model = ChatGoogleGenerativeAI(
+        model=settings.google_model,
+        api_key=settings.google_api_key,
+    ).bind_tools(SCOPE_TOOLS, tool_choice="any")
+    response = model.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "Xác định tin nhắn có thuộc phạm vi hỗ trợ của OA Cosmetics "
+                    "hay không và bắt buộc gọi đúng một tool. route_in_scope cho "
+                    "các nội dung: mỹ phẩm, chăm sóc da, thành phần, công dụng, "
+                    "giá, tồn kho, tư vấn sản phẩm, mua hàng, giỏ hàng, "
+                    "thông tin giao hàng, thanh toán, tra đơn, giao hàng, đổi trả "
+                    "hoặc khiếu nại về shop. Lời chào và câu trả lời ngắn như "
+                    "'có', 'không', 'đúng', số lượng, địa chỉ hay số điện "
+                    "thoại là route_in_scope khi phù hợp bước hội thoại hiện tại. "
+                    "route_out_of_scope cho tin tức, thời sự, chính trị, thể thao, "
+                    "thời tiết, chứng khoán, tiền mã hóa, lập trình, toán học, "
+                    "lịch sử, kiến thức phổ thông hoặc yêu cầu khác không liên "
+                    "quan đến hoạt động của shop. Không tự trả lời khách."
+                )
+            ),
+            HumanMessage(
+                content=(
+                    f"Bước hội thoại hiện tại: {current_step}\n"
+                    f"Tin nhắn khách: {text}"
+                )
+            ),
+        ]
+    )
+    if not response.tool_calls:
+        raise RuntimeError("Gemini không trả kết quả kiểm tra phạm vi.")
+    tool_name = response.tool_calls[0]["name"]
+    if tool_name == "route_out_of_scope":
+        return True
+    if tool_name == "route_in_scope":
+        return False
+    raise RuntimeError(f"Gemini gọi scope tool không được hỗ trợ: {tool_name}")
 
 
 def _interpret_intent(text: str) -> Intent:
@@ -98,16 +155,19 @@ def _interpret_intent(text: str) -> Intent:
 def classify_intent_node(state: AgentState) -> dict[str, Any]:
     text = latest_user_text(state)
     session = state.get("session", {})
-    if session.get("current_step") == "verifying_order_lookup":
-        intent: Intent = "order_lookup"
-    elif session.get("current_step", "idle") != "idle":
-        intent: Intent = "order"
+    current_step = session.get("current_step", "idle")
+    if _is_out_of_scope(text, current_step):
+        intent: Intent = "unknown"
+    elif current_step == "verifying_order_lookup":
+        intent = "order_lookup"
+    elif current_step != "idle":
+        intent = "order"
     else:
         intent = _interpret_intent(text)
     session_update: SessionState = {
         "session_id": session.get("session_id", state.get("user_id", "anonymous")),
         "current_intent": intent,
-        "current_step": session.get("current_step", "idle"),
+        "current_step": current_step,
         "cart": session.get("cart", []),
     }
     update: dict[str, Any] = {"session": session_update}
@@ -119,7 +179,10 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
 
 def fallback_node(_: AgentState) -> dict[str, Any]:
     reply = generate_reply(
-        "Chưa hiểu rõ yêu cầu của khách. Hỏi lại một cách thân thiện và gợi ý "
-        "khách có thể hỏi về sản phẩm, xin tư vấn theo loại da hoặc nói sản phẩm muốn mua."
+        "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
+        "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
+        "tư vấn chăm sóc da, mua hàng và tra cứu đơn hàng. Không trả "
+        "lời nội dung ngoài phạm vi. Mời khách đặt câu hỏi liên quan "
+        "đến sản phẩm hoặc nhu cầu chăm sóc da."
     )
     return {"reply": reply, "messages": [AIMessage(content=reply)]}
