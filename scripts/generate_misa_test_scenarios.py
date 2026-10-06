@@ -1,8 +1,4 @@
-"""Sinh kịch bản kiểm thử Mai Agent bằng MISA LLM Gateway.
 
-Mặc định script sinh 100 test case cho mỗi trong 7 năng lực của đặc tả.
-Mỗi case có thể có các lượt thiết lập state trước tin nhắn mục tiêu.
-"""
 
 from __future__ import annotations
 
@@ -319,9 +315,9 @@ def generate_requirement_cases(
             f"(batch {batch_number}, thêm {added})",
             flush=True,
         )
-        if stalled_batches >= 3:
+        if stalled_batches >= 10:
             raise RuntimeError(
-                f"{requirement['id']} không sinh thêm case hợp lệ sau 3 batch."
+                f"{requirement['id']} không sinh thêm case hợp lệ sau 10 batch."
             )
 
     return cases

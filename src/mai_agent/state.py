@@ -3,6 +3,12 @@ from typing import Annotated, Any, Literal, Required, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
+LanguageCode = Literal[
+    "vi",
+    "en",
+    "unknown",
+]
+
 Intent = Literal[
     "product_question",
     "recommendation",
@@ -73,6 +79,7 @@ class Address(TypedDict, total=False):
 
 
 class SessionState(TypedDict, total=False):
+    language_code: LanguageCode
     session_id: Required[str]
     current_intent: Intent
     current_step: ConversationStep
@@ -94,6 +101,7 @@ class SessionState(TypedDict, total=False):
 
 
 class CustomerProfile(TypedDict, total=False):
+    preferred_language: LanguageCode
     zalo_user_id: Required[str]
     name: str
     skin_type: str

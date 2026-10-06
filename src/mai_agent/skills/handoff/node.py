@@ -173,7 +173,8 @@ def create_handoff_node(state: AgentState) -> dict[str, Any]:
     reply = generate_reply(
         "Thông báo ngắn gọn rằng yêu cầu cùng lịch sử hội thoại và thông tin đơn liên "
         "quan đã được chuyển đầy đủ cho chủ shop; người thật sẽ tiếp nhận hỗ trợ. Không "
-        "hỏi khách cung cấp lại thông tin và không tự hứa thời gian phản hồi cụ thể."
+        "hỏi khách cung cấp lại thông tin và không tự hứa thời gian phản hồi cụ thể.",
+        response_language=state.get("session", {}).get("language_code", "vi"),
     )
     return {
         "reply": reply,

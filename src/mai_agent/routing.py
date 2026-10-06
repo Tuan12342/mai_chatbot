@@ -7,7 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from mai_agent.config import get_settings
 from mai_agent.customer_store import find_customer_by_zalo_id
 from mai_agent.reply_generator import generate_reply
-from mai_agent.state import AgentState, Intent, SessionState
+from mai_agent.state import AgentState, Intent, LanguageCode, SessionState
 
 
 def latest_user_text(state: AgentState) -> str:
@@ -16,6 +16,76 @@ def latest_user_text(state: AgentState) -> str:
         if isinstance(message, HumanMessage):
             return str(message.content)
     return ""
+
+
+@tool
+def use_vietnamese() -> str:
+    """Tin nhắn chủ yếu bằng tiếng Việt."""
+    return "vi"
+
+
+@tool
+def use_english() -> str:
+    """Tin nhắn chủ yếu bằng tiếng Anh."""
+    return "en"
+
+
+@tool
+def keep_current_language() -> str:
+    """Tin nhắn không đủ ngôn ngữ để xác định, giữ ngôn ngữ hiện tại."""
+    return "keep"
+
+
+LANGUAGE_TOOLS = [use_vietnamese, use_english, keep_current_language]
+
+
+def detect_language_node(state: AgentState) -> dict[str, Any]:
+    """Phát hiện ngôn ngữ lượt hiện tại mà không làm mất state nghiệp vụ."""
+    session = state.get("session", {})
+    customer = state.get("customer", {})
+    current_language = session.get("language_code")
+    if current_language not in {"vi", "en"}:
+        preferred_language = customer.get("preferred_language")
+        current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
+
+    settings = get_settings()
+    model = ChatGoogleGenerativeAI(
+        model=settings.google_model,
+        api_key=settings.google_api_key,
+    ).bind_tools(LANGUAGE_TOOLS, tool_choice="any")
+    response = model.invoke(
+        [
+            SystemMessage(
+                content=(
+                    "Xác định ngôn ngữ mà trợ lý phải dùng cho lượt trả lời tiếp theo "
+                    "và bắt buộc gọi đúng một tool. Gọi use_vietnamese khi tin nhắn "
+                    "thể hiện rõ tiếng Việt; gọi use_english khi thể hiện rõ tiếng Anh. "
+                    "Gọi keep_current_language với nội dung trung tính hoặc không đủ "
+                    "bằng chứng như SKU, tên sản phẩm, tên INCI, con số, số lượng, số "
+                    "điện thoại, địa chỉ ngắn, emoji, hoặc câu xác nhận rất ngắn. Việc "
+                    "đổi ngôn ngữ không được hiểu là bắt đầu phiên mới. Không trả lời khách."
+                )
+            ),
+            HumanMessage(
+                content=(
+                    f"Ngôn ngữ hiện tại: {current_language}\n"
+                    f"Tin nhắn mới: {latest_user_text(state)}"
+                )
+            ),
+        ]
+    )
+    if not response.tool_calls:
+        raise RuntimeError("Gemini không trả kết quả nhận diện ngôn ngữ.")
+
+    tool_name = response.tool_calls[0]["name"]
+    language_by_tool: dict[str, LanguageCode] = {
+        "use_vietnamese": "vi",
+        "use_english": "en",
+        "keep_current_language": current_language,
+    }
+    if tool_name not in language_by_tool:
+        raise RuntimeError(f"Gemini gọi language tool không được hỗ trợ: {tool_name}")
+    return {"session": {"language_code": language_by_tool[tool_name]}}
 
 
 @tool
@@ -166,6 +236,7 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
         intent = _interpret_intent(text)
     session_update: SessionState = {
         "session_id": session.get("session_id", state.get("user_id", "anonymous")),
+        "language_code": session.get("language_code", "vi"),
         "current_intent": intent,
         "current_step": current_step,
         "cart": session.get("cart", []),
@@ -177,12 +248,13 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
     return update
 
 
-def fallback_node(_: AgentState) -> dict[str, Any]:
+def fallback_node(state: AgentState) -> dict[str, Any]:
     reply = generate_reply(
         "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
         "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
         "tư vấn chăm sóc da, mua hàng và tra cứu đơn hàng. Không trả "
         "lời nội dung ngoài phạm vi. Mời khách đặt câu hỏi liên quan "
-        "đến sản phẩm hoặc nhu cầu chăm sóc da."
+        "đến sản phẩm hoặc nhu cầu chăm sóc da.",
+        response_language=state.get("session", {}).get("language_code", "vi"),
     )
     return {"reply": reply, "messages": [AIMessage(content=reply)]}

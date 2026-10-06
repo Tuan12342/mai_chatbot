@@ -1,7 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from mai_agent.routing import classify_intent_node, fallback_node
+from mai_agent.routing import classify_intent_node, detect_language_node, fallback_node
 from mai_agent.skills.handoff import (
     create_handoff_node,
     handoff_guard_node,
@@ -29,6 +29,7 @@ def create_agent_graph(*, checkpointer=None):
     """Tạo và compile LangGraph cho agent Mai."""
     builder = StateGraph(AgentState)
 
+    builder.add_node("detect_language", detect_language_node)
     builder.add_node("handoff_guard", handoff_guard_node)
     builder.add_node("create_handoff", create_handoff_node)
     builder.add_node("human_wait", human_wait_node)
@@ -39,7 +40,8 @@ def create_agent_graph(*, checkpointer=None):
     builder.add_node("order_lookup", order_lookup_node)
     builder.add_node("fallback", fallback_node)
 
-    builder.add_edge(START, "handoff_guard")
+    builder.add_edge(START, "detect_language")
+    builder.add_edge("detect_language", "handoff_guard")
     builder.add_conditional_edges(
         "handoff_guard",
         route_handoff,

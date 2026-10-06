@@ -1,4 +1,5 @@
 import re
+from contextvars import ContextVar
 from typing import Any
 
 from langchain_core.messages import AIMessage
@@ -12,10 +13,17 @@ from mai_agent.skills.order_lookup.tools import (
 from mai_agent.state import AgentState
 
 MAX_VERIFICATION_ATTEMPTS = 3
+_LOOKUP_RESPONSE_LANGUAGE: ContextVar[str] = ContextVar(
+    "lookup_response_language",
+    default="vi",
+)
 
 
 def _reply(text: str, session: dict[str, Any]) -> dict[str, Any]:
-    rendered_text = generate_reply(text)
+    rendered_text = generate_reply(
+        text,
+        response_language=_LOOKUP_RESPONSE_LANGUAGE.get(),
+    )
     return {
         "reply": rendered_text,
         "messages": [AIMessage(content=rendered_text)],
@@ -51,6 +59,9 @@ def _format_orders(orders: list[dict[str, Any]]) -> str:
 
 def order_lookup_node(state: AgentState) -> dict[str, Any]:
     """Xác minh nhẹ rồi mới trả đơn của Zalo user ID đang trò chuyện."""
+    _LOOKUP_RESPONSE_LANGUAGE.set(
+        state.get("session", {}).get("language_code", "vi")
+    )
     user_id = state.get("user_id", "")
     session = state.get("session", {})
     attempts = session.get("verification_attempts", 0)

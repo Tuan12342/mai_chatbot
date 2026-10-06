@@ -12,6 +12,8 @@ from mai_agent.state import AgentState
 def assistant_node(state: AgentState) -> dict[str, Any]:
     settings = get_settings()
     customer = state.get("customer", {})
+    response_language = state.get("session", {}).get("language_code", "vi")
+    language_name = "English" if response_language == "en" else "Vietnamese"
     profile_context = (
         "Hồ sơ được hệ thống nạp cho đúng Zalo user hiện tại:\n"
         f"- Loại da: {customer.get('skin_type', 'chưa biết')}\n"
@@ -26,6 +28,10 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
     system_message = SystemMessage(
         content=(
             f"{SYSTEM_PROMPT}\n\n"
+            f"Ngôn ngữ bắt buộc của câu trả lời hiện tại: {language_name}.\n"
+            "Dù ngôn ngữ trả lời thay đổi, phải tiếp tục dùng hồ sơ, lịch sử và "
+            "trạng thái phiên đã có. Không dịch SKU, tên riêng sản phẩm, thương hiệu "
+            "hoặc tên thành phần INCI trong kết quả công cụ.\n"
             "Quy tắc sử dụng công cụ:\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
             "độ phù hợp hoặc so sánh sản phẩm.\n"

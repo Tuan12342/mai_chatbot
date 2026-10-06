@@ -1,5 +1,6 @@
 import re
 import uuid
+from contextvars import ContextVar
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -14,6 +15,11 @@ from mai_agent.routing import latest_user_text
 from mai_agent.skills.order.tools import resolve_order_product
 from mai_agent.skills.product.tools import check_product_stock
 from mai_agent.state import AgentState
+
+_ORDER_RESPONSE_LANGUAGE: ContextVar[str] = ContextVar(
+    "order_response_language",
+    default="vi",
+)
 
 
 def _reply(
@@ -32,7 +38,10 @@ def _reply(
 
 def _generate_order_reply(business_context: str) -> str:
     """Yêu cầu Gemini viết phản hồi từ kết quả nghiệp vụ đã được kiểm tra."""
-    return generate_reply(business_context)
+    return generate_reply(
+        business_context,
+        response_language=_ORDER_RESPONSE_LANGUAGE.get(),
+    )
 
 
 @tool
@@ -112,6 +121,16 @@ class OrderRequestItem(BaseModel):
         default=None,
         description="Số lượng khách yêu cầu; null nếu khách chưa nêu",
     )
+    quantity_explicitly_provided: bool = Field(
+        default=False,
+        description="True chỉ khi khách trực tiếp nói hoặc viết số lượng",
+    )
+    quantity_evidence: str = Field(
+        default="",
+        description=(
+            "Đoạn nguyên văn thể hiện số lượng trong tin nhắn; để trống nếu chưa nêu"
+        ),
+    )
 
 
 @tool
@@ -122,6 +141,29 @@ def provide_order_request(items: list[OrderRequestItem]) -> list[dict[str, Any]]
 
 BINARY_CHOICE_TOOLS = [accept_offer, decline_offer]
 ORDER_REQUEST_TOOLS = [provide_order_request]
+
+
+def _has_quantity_evidence(text: str, evidence: str) -> bool:
+    """Chỉ chấp nhận bằng chứng số lượng đứng độc lập, không nằm trong SKU."""
+    normalized_evidence = " ".join(evidence.strip().split())
+    if not normalized_evidence:
+        return False
+    return re.search(
+        rf"(?<!\w){re.escape(normalized_evidence)}(?!\w)",
+        text,
+        flags=re.IGNORECASE,
+    ) is not None
+
+
+def _validated_quantity(text: str, item: dict[str, Any]) -> int | None:
+    """Loại số lượng do model suy đoán hoặc lấy nhầm từ mã sản phẩm."""
+    quantity = item.get("quantity")
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
+        return None
+    if not item.get("quantity_explicitly_provided"):
+        return None
+    evidence = str(item.get("quantity_evidence", ""))
+    return quantity if _has_quantity_evidence(text, evidence) else None
 
 
 @tool
@@ -394,14 +436,22 @@ def _interpret_order_request(
                     "Trích yêu cầu mua hàng từ tin nhắn và bắt buộc gọi "
                     "provide_order_request. Mỗi sản phẩm phải là một item riêng với "
                     "đúng số lượng đi kèm; tuyệt đối không cộng số lượng của nhiều "
-                    "sản phẩm. Chuyển số lượng viết bằng chữ thành số. Nếu khách nói "
+                    "sản phẩm. Chỉ đặt quantity_explicitly_provided=true khi khách "
+                    "trực tiếp nêu số lượng, đồng thời chép đúng phần nguyên văn đó "
+                    "vào quantity_evidence. Nếu khách chỉ nói muốn mua mà chưa nói "
+                    "bao nhiêu thì quantity=null, quantity_explicitly_provided=false "
+                    "và quantity_evidence=''; tuyệt đối không mặc định là 1. Chữ số "
+                    "nằm trong SKU như OA002 không phải số lượng. Chuyển số lượng viết "
+                    "bằng chữ thành số. Nếu khách nói "
                     "'loại 1', 'loại 2'..., ánh xạ theo đúng thứ tự danh sách đã giới "
                     "thiệu và trả mã SKU tương ứng. Không tự trả lời khách."
                     "- “loại này”, “sản phẩm này” là sản phẩm vừa được tư vấn gần nhất. "
                     "- “loại 1”, “loại 2” ánh xạ theo thứ tự offered_candidates. "
                     "- Mỗi sản phẩm phải tạo một item riêng. "
                     "- Không cộng số lượng của nhiều sản phẩm. "
-                    "Chuyển số lượng viết bằng chữ thành số."
+                    "Chuyển số lượng viết bằng chữ thành số. Ví dụ 'I want to buy "
+                    "OA Purifying Gel' phải có quantity=null; 'I want to buy two OA "
+                    "Purifying Gel' có quantity=2 và quantity_evidence='two'."
                 )
             ),
             HumanMessage(
@@ -422,7 +472,7 @@ def _interpret_order_request(
         "items": [
             {
                 "product_reference": item.get("product_reference") or None,
-                "quantity": item.get("quantity"),
+                "quantity": _validated_quantity(text, item),
             }
             for item in items
         ]
@@ -898,6 +948,9 @@ def _prepare_cart_revision(
 
 
 def order_node(state: AgentState) -> dict[str, Any]:
+    _ORDER_RESPONSE_LANGUAGE.set(
+        state.get("session", {}).get("language_code", "vi")
+    )
     text = latest_user_text(state)
     session = state.get("session", {})
     current_step = session.get("current_step", "idle")
