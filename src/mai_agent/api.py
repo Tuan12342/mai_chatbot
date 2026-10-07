@@ -1,28 +1,39 @@
 import logging
 import os
+import sqlite3
 from importlib.resources import files
+from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 
+from mai_agent.chat_sessions import (
+    create_chat_session,
+    get_chat_session,
+    list_chat_sessions,
+    touch_chat_session,
+)
 from mai_agent.graph import create_agent_graph
 
 LOGGER = logging.getLogger(__name__)
 USER_ID = "local-user"
-THREAD_ID = "web-local-user"
-GRAPH_CONFIG = {"configurable": {"thread_id": THREAD_ID}}
 GRAPH_LOCK = Lock()
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CHECKPOINTS_DATABASE = DATA_DIR / "chat_checkpoints.sqlite"
+CHECKPOINT_CONNECTION = sqlite3.connect(CHECKPOINTS_DATABASE, check_same_thread=False)
 
-graph = create_agent_graph(checkpointer=InMemorySaver())
+graph = create_agent_graph(checkpointer=SqliteSaver(CHECKPOINT_CONNECTION))
 app = FastAPI(title="Mai — OA Cosmetics", version="0.1.0")
 
 
 class ChatRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=100)
     message: str = Field(min_length=1, max_length=4000)
 
 
@@ -38,20 +49,31 @@ class ChatResponse(BaseModel):
     handoff_status: str
 
 
-def _invoke_graph(message: str) -> dict[str, Any]:
+class ChatSession(BaseModel):
+    session_id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+def _graph_config(session_id: str) -> dict[str, dict[str, str]]:
+    return {"configurable": {"thread_id": session_id}}
+
+
+def _invoke_graph(message: str, session_id: str) -> dict[str, Any]:
     with GRAPH_LOCK:
         return graph.invoke(
             {
                 "user_id": USER_ID,
                 "messages": [HumanMessage(content=message)],
             },
-            config=GRAPH_CONFIG,
+            config=_graph_config(session_id),
         )
 
 
-def _read_history() -> list[ChatMessage]:
+def _read_history(session_id: str) -> list[ChatMessage]:
     with GRAPH_LOCK:
-        snapshot = graph.get_state(GRAPH_CONFIG)
+        snapshot = graph.get_state(_graph_config(session_id))
     state = snapshot.values or {}
     history: list[ChatMessage] = []
     for message in state.get("messages", []):
@@ -79,8 +101,20 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/history", response_model=list[ChatMessage])
-def history() -> list[ChatMessage]:
-    return _read_history()
+def history(session_id: str) -> list[ChatMessage]:
+    if get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
+    return _read_history(session_id)
+
+
+@app.get("/api/sessions", response_model=list[ChatSession])
+def sessions() -> list[dict[str, Any]]:
+    return list_chat_sessions()
+
+
+@app.post("/api/sessions", response_model=ChatSession, status_code=201)
+def create_session() -> dict[str, Any]:
+    return create_chat_session()
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -88,8 +122,11 @@ def chat(payload: ChatRequest) -> ChatResponse:
     message = payload.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Tin nhắn không được để trống.")
+    if get_chat_session(payload.session_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
     try:
-        result = _invoke_graph(message)
+        result = _invoke_graph(message, payload.session_id)
+        touch_chat_session(payload.session_id, message)
     except Exception as error:
         LOGGER.exception("Không thể xử lý tin nhắn", exc_info=error)
         raise HTTPException(

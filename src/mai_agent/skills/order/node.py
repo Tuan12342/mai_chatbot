@@ -134,14 +134,21 @@ class OrderRequestItem(BaseModel):
 
 
 @tool
-def provide_order_request(items: list[OrderRequestItem]) -> list[dict[str, Any]]:
-    """Trích tất cả sản phẩm và số lượng tương ứng trong yêu cầu mua hàng."""
-    return [item.model_dump() for item in items]
+def provide_complete_order_request(
+    items: list[OrderRequestItem],
+    address: str = "",
+    phone: str = "",
+) -> dict[str, Any]:
+    """Trích sản phẩm, số lượng và thông tin giao hàng trong cùng tin nhắn."""
+    return {
+        "items": [item.model_dump() for item in items],
+        "address": address,
+        "phone": phone,
+    }
 
 
+ORDER_REQUEST_TOOLS = [provide_complete_order_request]
 BINARY_CHOICE_TOOLS = [accept_offer, decline_offer]
-ORDER_REQUEST_TOOLS = [provide_order_request]
-
 
 def _has_quantity_evidence(text: str, evidence: str) -> bool:
     """Chỉ chấp nhận bằng chứng số lượng đứng độc lập, không nằm trong SKU."""
@@ -434,7 +441,7 @@ def _interpret_order_request(
             SystemMessage(
                 content=(
                     "Trích yêu cầu mua hàng từ tin nhắn và bắt buộc gọi "
-                    "provide_order_request. Mỗi sản phẩm phải là một item riêng với "
+                    "provide_complete_order_request. Mỗi sản phẩm phải là một item riêng với "
                     "đúng số lượng đi kèm; tuyệt đối không cộng số lượng của nhiều "
                     "sản phẩm. Chỉ đặt quantity_explicitly_provided=true khi khách "
                     "trực tiếp nêu số lượng, đồng thời chép đúng phần nguyên văn đó "
@@ -452,6 +459,10 @@ def _interpret_order_request(
                     "Chuyển số lượng viết bằng chữ thành số. Ví dụ 'I want to buy "
                     "OA Purifying Gel' phải có quantity=null; 'I want to buy two OA "
                     "Purifying Gel' có quantity=2 và quantity_evidence='two'."
+                    "Chỉ điền address khi khách thực sự cung cấp địa chỉ. "
+                    "Chỉ điền phone khi khách thực sự cung cấp số điện thoại. "
+                    "Không được lấy số điện thoại làm địa chỉ và không tự bịa trường còn thiếu. "
+                    "Trường chưa được cung cấp phải là chuỗi rỗng. Không tự trả lời khách."
                 )
             ),
             HumanMessage(
@@ -465,9 +476,10 @@ def _interpret_order_request(
     if not response.tool_calls:
         raise RuntimeError("Gemini không trích được yêu cầu đặt hàng.")
     call = response.tool_calls[0]
-    if call["name"] != "provide_order_request":
+    if call["name"] != "provide_complete_order_request":
         raise RuntimeError(f"Gemini gọi tool không được hỗ trợ: {call['name']}")
-    items = call["args"].get("items", [])
+    args = call["args"]
+    items = args.get("items", [])
     return {
         "items": [
             {
@@ -475,7 +487,9 @@ def _interpret_order_request(
                 "quantity": _validated_quantity(text, item),
             }
             for item in items
-        ]
+        ],
+         "address": " ".join(str(args.get("address", "")).split()),
+        "phone": str(args.get("phone", "")).strip(),
     }
 
 
@@ -748,6 +762,27 @@ def _normalize_phone(phone: str) -> str | None:
     if re.fullmatch(r"(?:\+?84|0)\d{8,9}", normalized):
         return normalized
     return None
+
+def _resolve_shipping_slots(
+    parsed: dict[str, Any],
+    session: dict[str, Any],
+) -> tuple[str | None, str | None]:
+    supplied_address = " ".join(str(parsed.get("address", "")).split())
+    supplied_phone = _normalize_phone(str(parsed.get("phone", "")))
+
+    saved_address = str(session.get("pending_shipping_address") or "")
+    saved_phone = str(session.get("pending_phone") or "")
+
+    if _is_valid_shipping_address(supplied_address):
+        address = supplied_address
+    elif _is_valid_shipping_address(saved_address):
+        address = saved_address
+    else:
+        address = None
+
+    phone = supplied_phone or _normalize_phone(saved_phone)
+
+    return address, phone
 
 
 def _interpret_cart_revision_confirmation(
@@ -1467,6 +1502,10 @@ def order_node(state: AgentState) -> dict[str, Any]:
     offered_candidates = pending_candidates or session.get("last_product_candidates", [])
     parsed = _interpret_order_request(text, offered_candidates)
     requested_items = parsed["items"]
+    shipping_address, shipping_phone = _resolve_shipping_slots(
+        parsed,
+        session,
+    )
     if len(requested_items) > 1:
         return _process_multi_item_order(state, requested_items, cart)
 
@@ -1527,8 +1566,6 @@ def order_node(state: AgentState) -> dict[str, Any]:
         product_reference = session["pending_product_reference"]
     if pending_candidates:
         product_reference = interpreted_reference
-        if quantity is None:
-            quantity = session.get("pending_quantity")
         if pending_action == "search":
             pending_candidates = []
 
@@ -1636,6 +1673,8 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 "pending_product_reference": selected_product["product_id"],
                 "pending_product_candidates": [],
                 "pending_quantity": None,
+                "pending_shipping_address": shipping_address,
+                "pending_phone": shipping_phone,
             },
         )
 
@@ -1710,11 +1749,54 @@ def order_node(state: AgentState) -> dict[str, Any]:
         },
     ]
 
+    return _reply_after_cart_ready(
+        updated_cart,
+        shipping_address,
+        shipping_phone,
+    )
+
+
+def _reply_after_cart_ready(
+    cart: list[dict[str, Any]],
+    address: str | None,
+    phone: str | None,
+) -> dict[str, Any]:
+    if address and phone:
+        total_amount = sum(
+            item["quantity"] * item["unit_price"] for item in cart
+        )
+        item_summary = ", ".join(
+            f"{item['product_id']} - {item['product_name']} "
+            f"x{item['quantity']}"
+            for item in cart
+        )
+
+        return _reply(
+            f"Đọc lại toàn bộ đơn để khách xác nhận: {item_summary}; "
+            f"tổng tiền {total_amount:,} đồng; địa chỉ {address}; "
+            f"số điện thoại {phone}. Hỏi khách có xác nhận đặt đơn không. "
+            "Chưa tạo đơn trước khi khách xác nhận.",
+            {
+                "current_step": "confirming_order",
+                "cart": cart,
+                "pending_shipping_address": address,
+                "pending_phone": phone,
+            },
+        )
+
+    missing_fields = []
+    if not address:
+        missing_fields.append("địa chỉ giao hàng")
+    if not phone:
+        missing_fields.append("số điện thoại")
+
     return _reply(
-        f"Em đã thêm {quantity} {stock_result['product_name']} vào giỏ. "
-        "Hỏi khách cung cấp địa chỉ giao hàng và số điện thoại người nhận.",
+        "Đã kiểm tra sản phẩm và số lượng. "
+        f"Hỏi khách cung cấp phần còn thiếu: {', '.join(missing_fields)}.",
         {
             "current_step": "collecting_address",
-            "cart": updated_cart,
+            "cart": cart,
+            "pending_shipping_address": address,
+            "pending_phone": phone,
         },
     )
