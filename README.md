@@ -38,6 +38,12 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
+Để hiển thị mã thanh toán VietQR sau khi khách xác nhận đơn, cấu hình các biến
+`VIETQR_BANK_ID`, `VIETQR_ACCOUNT_NUMBER` và `VIETQR_ACCOUNT_NAME` trong `.env`.
+`VIETQR_BANK_ID` có thể là mã ngân hàng như `MB`, `VCB` hoặc `ACB`. Mã QR sẽ tự
+điền đúng tổng tiền và nội dung chuyển khoản theo mã đơn; ứng dụng không hiển thị
+QR nếu chưa cấu hình đủ thông tin để tránh khách chuyển nhầm tài khoản.
+
 ## Chạy agent
 
 ```powershell

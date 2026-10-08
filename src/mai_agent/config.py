@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     google_api_key: str
     google_model: str = "gemini-3.5-flash-lite"
     google_embedding_model: str = "models/gemini-embedding-001"
+    vietqr_bank_id: str = ""
+    vietqr_account_number: str = ""
+    vietqr_account_name: str = ""
+    vietqr_template: str = "compact2"
 
 
 @lru_cache

@@ -19,6 +19,7 @@ from mai_agent.chat_sessions import (
     touch_chat_session,
 )
 from mai_agent.graph import create_agent_graph
+from mai_agent.payment import build_vietqr_payment
 
 LOGGER = logging.getLogger(__name__)
 USER_ID = "local-user"
@@ -42,11 +43,22 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class PaymentResponse(BaseModel):
+    order_id: str
+    amount: int
+    bank_id: str
+    account_number: str
+    account_name: str
+    transfer_content: str
+    qr_image_url: str
+
+
 class ChatResponse(BaseModel):
     reply: str
     current_step: str
     cart: list[dict[str, Any]]
     handoff_status: str
+    payment: PaymentResponse | None = None
 
 
 class ChatSession(BaseModel):
@@ -89,6 +101,15 @@ def _read_history(session_id: str) -> list[ChatMessage]:
     return history
 
 
+def _read_payment(session_id: str) -> dict[str, Any] | None:
+    with GRAPH_LOCK:
+        snapshot = graph.get_state(_graph_config(session_id))
+    order = (snapshot.values or {}).get("active_order", {})
+    if order.get("status") != "confirmed" or order.get("payment_status") != "pending":
+        return None
+    return build_vietqr_payment(order)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     html = files("mai_agent.web").joinpath("index.html").read_text(encoding="utf-8")
@@ -105,6 +126,13 @@ def history(session_id: str) -> list[ChatMessage]:
     if get_chat_session(session_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
     return _read_history(session_id)
+
+
+@app.get("/api/payment", response_model=PaymentResponse | None)
+def payment(session_id: str) -> dict[str, Any] | None:
+    if get_chat_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
+    return _read_payment(session_id)
 
 
 @app.get("/api/sessions", response_model=list[ChatSession])
@@ -136,11 +164,19 @@ def chat(payload: ChatRequest) -> ChatResponse:
 
     session = result.get("session", {})
     handoff = result.get("handoff", {})
+    active_order = result.get("active_order", {})
+    payment_info = None
+    if (
+        active_order.get("status") == "confirmed"
+        and active_order.get("payment_status") == "pending"
+    ):
+        payment_info = build_vietqr_payment(active_order)
     return ChatResponse(
         reply=result.get("reply", ""),
         current_step=session.get("current_step", "idle"),
         cart=session.get("cart", []),
         handoff_status=handoff.get("status", "inactive"),
+        payment=payment_info,
     )
 
 
