@@ -1,16 +1,14 @@
 from typing import Any
 
 from langchain_core.messages import SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from mai_agent.config import get_settings
+from mai_agent.llm import create_chat_model
 from mai_agent.prompts import SYSTEM_PROMPT
 from mai_agent.skills.product.tools import PRODUCT_TOOLS
 from mai_agent.state import AgentState
 
 
 def assistant_node(state: AgentState) -> dict[str, Any]:
-    settings = get_settings()
     customer = state.get("customer", {})
     response_language = state.get("session", {}).get("language_code", "vi")
     language_name = "English" if response_language == "en" else "Vietnamese"
@@ -20,11 +18,7 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         f"- Thành phần cần loại trừ: {customer.get('excluded_ingredients', [])}\n"
         "Không hỏi hoặc tự suy đoán Zalo user ID."
     )
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    )
-    model_with_tools = model.bind_tools(PRODUCT_TOOLS)
+    model_with_tools = create_chat_model().bind_tools(PRODUCT_TOOLS)
     system_message = SystemMessage(
         content=(
             f"{SYSTEM_PROMPT}\n\n"

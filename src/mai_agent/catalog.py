@@ -1,9 +1,18 @@
 import json
+import re
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 PRODUCTS_FILE = Path(__file__).resolve().parents[2] / "data" / "products.json"
+
+
+def normalize_product_reference(text: str) -> str:
+    """Chuẩn hóa tên/mã sản phẩm để dùng chung cho đặt hàng và tìm tài liệu."""
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    without_accents = "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", without_accents).split())
 
 
 @lru_cache
@@ -27,7 +36,7 @@ def find_alternative_products(
     *,
     skin_type: str | None = None,
     excluded_ingredients: list[str] | None = None,
-    limit = 5,
+    limit=5,
 ) -> list[dict[str, Any]]:
     """Tìm sản phẩm cùng danh mục, còn hàng và phù hợp hồ sơ da."""
     unavailable_product = find_product(product_id)
@@ -57,11 +66,7 @@ def find_alternative_products(
             continue
 
         ingredients = {ingredient.lower() for ingredient in product["ingredients"]}
-        if any(
-            blocked in ingredient
-            for blocked in excluded
-            for ingredient in ingredients
-        ):
+        if any(blocked in ingredient for blocked in excluded for ingredient in ingredients):
             continue
 
         alternatives.append(

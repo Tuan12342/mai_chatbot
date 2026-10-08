@@ -13,7 +13,6 @@ def main() -> None:
     while True:
         text = input("Bạn: ").strip()
 
-
         result = graph.invoke(
             {
                 "user_id": user_id,

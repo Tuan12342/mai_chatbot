@@ -1,18 +1,13 @@
 import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from mai_agent.config import get_settings
+from mai_agent.llm import create_chat_model
 
 
 def generate_reply(business_context: str, *, response_language: str = "vi") -> str:
     """Để Gemini viết lời đáp từ dữ liệu nghiệp vụ do code cung cấp."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    )
+    model = create_chat_model()
     language_name = "English" if response_language == "en" else "Vietnamese"
     response = model.invoke(
         [

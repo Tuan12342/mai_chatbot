@@ -13,7 +13,6 @@ Intent = Literal[
     "product_question",
     "recommendation",
     "order",
-    "order_lookup",
     "unknown",
 ]
 
@@ -26,7 +25,6 @@ ConversationStep = Literal[
     "collecting_address",
     "confirming_cart_revision",
     "confirming_order",
-    "verifying_order_lookup",
 ]
 
 OrderStatus = Literal[
@@ -84,15 +82,12 @@ class SessionState(TypedDict, total=False):
     current_intent: Intent
     current_step: ConversationStep
     cart: list[CartItem]
-    active_order_id: str
     pending_product_id: str | None
     pending_product_reference: str | None
     pending_product_candidates: list[ProductCandidate]
     last_product_candidates: list[ProductCandidate]
     pending_quantity: int | None
-    pending_order_items: list[dict[str, Any]]
     pending_cart_revision: list[CartItem]
-    cart_revision_reason: str | None
     pending_revised_shipping_address: str | None
     pending_revised_phone: str | None
     pending_shipping_address: str | None

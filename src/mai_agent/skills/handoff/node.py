@@ -3,10 +3,9 @@ from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from mai_agent.config import get_settings
 from mai_agent.customer_store import find_customer_by_zalo_id
+from mai_agent.llm import invoke_tool
 from mai_agent.order_store import find_orders_by_customer_id
 from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
@@ -22,27 +21,16 @@ ACTIVE_HANDOFF_STATUSES = {"waiting_for_human", "human_active"}
 
 
 def _conversation_text(state: AgentState, *, limit: int = 20) -> str:
-    lines: list[str] = []
-    for message in state.get("messages", [])[-limit:]:
-        if isinstance(message, HumanMessage):
-            role = "Khách"
-        elif isinstance(message, AIMessage):
-            role = "Mai"
-        else:
-            continue
-        content = str(message.content).strip()
-        if content:
-            lines.append(f"{role}: {content}")
-    return "\n".join(lines)
+    roles = {"user": "Khách", "assistant": "Mai"}
+    return "\n".join(
+        f"{roles[message['role']]}: {message['content']}"
+        for message in _serialize_messages(state, limit=limit)
+    )
 
 
 def _assess_latest_message(state: AgentState) -> dict[str, Any]:
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(HANDOFF_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        HANDOFF_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -60,11 +48,10 @@ def _assess_latest_message(state: AgentState) -> dict[str, Any]:
                     f"Tin nhắn cần đánh giá: {latest_user_text(state)}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không trả kết quả đánh giá handoff.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không trả kết quả đánh giá handoff.")
-    return dict(response.tool_calls[0]["args"])
+    return dict(call["args"])
 
 
 def _serialize_messages(state: AgentState, *, limit: int = 30) -> list[dict[str, str]]:

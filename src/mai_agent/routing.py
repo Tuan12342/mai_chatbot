@@ -1,13 +1,12 @@
-from typing import Any
+from typing import Any, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from mai_agent.config import get_settings
 from mai_agent.customer_store import find_customer_by_zalo_id
+from mai_agent.llm import invoke_tool
 from mai_agent.reply_generator import generate_reply
-from mai_agent.state import AgentState, Intent, LanguageCode, SessionState
+from mai_agent.state import AgentState, ConversationStep, Intent, LanguageCode, SessionState
 
 
 def latest_user_text(state: AgentState) -> str:
@@ -48,12 +47,8 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
         preferred_language = customer.get("preferred_language")
         current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
 
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(LANGUAGE_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        LANGUAGE_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -72,12 +67,11 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
                     f"Tin nhắn mới: {latest_user_text(state)}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không trả kết quả nhận diện ngôn ngữ.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không trả kết quả nhận diện ngôn ngữ.")
 
-    tool_name = response.tool_calls[0]["name"]
+    tool_name = call["name"]
     language_by_tool: dict[str, LanguageCode] = {
         "use_vietnamese": "vi",
         "use_english": "en",
@@ -95,12 +89,6 @@ def route_order() -> str:
 
 
 @tool
-def route_order_lookup() -> str:
-    """Khách muốn tra cứu đơn hàng cũ hoặc trạng thái giao hàng."""
-    return "order_lookup"
-
-
-@tool
 def route_recommendation() -> str:
     """Khách cần tư vấn hoặc gợi ý sản phẩm theo nhu cầu và tình trạng da."""
     return "recommendation"
@@ -114,7 +102,7 @@ def route_product_question() -> str:
 
 @tool
 def route_unknown() -> str:
-    """Yêu cầu không thuộc các năng lực mua hàng, tra đơn hay tư vấn sản phẩm."""
+    """Yêu cầu chưa được hỗ trợ, gồm tra đơn cũ hoặc ngoài tư vấn và mua sản phẩm."""
     return "unknown"
 
 
@@ -132,7 +120,6 @@ def route_out_of_scope() -> str:
 
 ROUTING_TOOLS = [
     route_order,
-    route_order_lookup,
     route_recommendation,
     route_product_question,
     route_unknown,
@@ -143,12 +130,8 @@ SCOPE_TOOLS = [route_in_scope, route_out_of_scope]
 
 def _is_out_of_scope(text: str, current_step: str) -> bool:
     """Dùng Gemini chặn yêu cầu ngoài phạm vi trước khi phân luồng."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(SCOPE_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        SCOPE_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -167,16 +150,12 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
                 )
             ),
             HumanMessage(
-                content=(
-                    f"Bước hội thoại hiện tại: {current_step}\n"
-                    f"Tin nhắn khách: {text}"
-                )
+                content=(f"Bước hội thoại hiện tại: {current_step}\nTin nhắn khách: {text}")
             ),
-        ]
+        ],
+        error_message="Gemini không trả kết quả kiểm tra phạm vi.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không trả kết quả kiểm tra phạm vi.")
-    tool_name = response.tool_calls[0]["name"]
+    tool_name = call["name"]
     if tool_name == "route_out_of_scope":
         return True
     if tool_name == "route_in_scope":
@@ -185,12 +164,8 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
 
 
 def _interpret_intent(text: str) -> Intent:
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(ROUTING_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        ROUTING_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -205,18 +180,16 @@ def _interpret_intent(text: str) -> Intent:
                 )
             ),
             HumanMessage(content=text),
-        ]
+        ],
+        error_message="Gemini không chọn intent cho tin nhắn.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn intent cho tin nhắn.")
     tool_to_intent: dict[str, Intent] = {
         "route_order": "order",
-        "route_order_lookup": "order_lookup",
         "route_recommendation": "recommendation",
         "route_product_question": "product_question",
         "route_unknown": "unknown",
     }
-    tool_name = response.tool_calls[0]["name"]
+    tool_name = call["name"]
     if tool_name not in tool_to_intent:
         raise RuntimeError(f"Gemini gọi routing tool không được hỗ trợ: {tool_name}")
     return tool_to_intent[tool_name]
@@ -226,10 +199,10 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
     text = latest_user_text(state)
     session = state.get("session", {})
     current_step = session.get("current_step", "idle")
+    if current_step not in get_args(ConversationStep):
+        current_step = "idle"
     if _is_out_of_scope(text, current_step):
         intent: Intent = "unknown"
-    elif current_step == "verifying_order_lookup":
-        intent = "order_lookup"
     elif current_step != "idle":
         intent = "order"
     else:
@@ -252,7 +225,8 @@ def fallback_node(state: AgentState) -> dict[str, Any]:
     reply = generate_reply(
         "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
         "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
-        "tư vấn chăm sóc da, mua hàng và tra cứu đơn hàng. Không trả "
+        "tư vấn chăm sóc da và đặt đơn mới. Với yêu cầu tra đơn cũ, "
+        "hướng dẫn khách liên hệ nhân viên shop. Không trả "
         "lời nội dung ngoài phạm vi. Mời khách đặt câu hỏi liên quan "
         "đến sản phẩm hoặc nhu cầu chăm sóc da.",
         response_language=state.get("session", {}).get("language_code", "vi"),

@@ -90,7 +90,6 @@ def check_product_stock(
     }
 
 
-
 @tool
 def search_product_knowledge(
     query: str,

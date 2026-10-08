@@ -1,12 +1,10 @@
 import math
-import re
-import unicodedata
 from collections.abc import Iterable
 from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Any, Protocol, TypedDict
 
-from mai_agent.catalog import load_products
+from mai_agent.catalog import load_products, normalize_product_reference
 from mai_agent.skills.product.embeddings import get_product_embeddings
 
 
@@ -27,62 +25,30 @@ class SearchResult(ProductChunk):
     score: float
 
 
-def _join(values: list[str]) -> str:
-    return ", ".join(values)
-
-
 def build_product_chunks(products: list[dict[str, Any]] | None = None) -> list[ProductChunk]:
-
     chunks: list[ProductChunk] = []
-    for product in products or load_products():
-        common = {
-            "product_id": product["id"],
-            "product_name": product["name"],
+    for product in load_products() if products is None else products:
+        label = f"{product['name']} ({product['id']})"
+        sections = {
+            "overview": (
+                f"Sản phẩm {label}. Danh mục: {product['category']}. "
+                f"Phù hợp: {', '.join(product['skin_types'])}. "
+                f"Giá: {product['price_vnd']} VND."
+            ),
+            "ingredients": f"Thành phần của {label}: {', '.join(product['ingredients'])}.",
+            "benefits": f"Công dụng của {label}: {', '.join(product['benefits'])}.",
+            "usage": f"Cách dùng {label}: {product['usage']}",
         }
         chunks.extend(
-            [
-                {
-                    **common,
-                    "section": "overview",
-                    "content": (
-                        f"Sản phẩm {product['name']} ({product['id']}). "
-                        f"Danh mục: {product['category']}. "
-                        f"Phù hợp: {_join(product['skin_types'])}. "
-                        f"Giá: {product['price_vnd']} VND."
-                    ),
-                },
-                {
-                    **common,
-                    "section": "ingredients",
-                    "content": (
-                        f"Thành phần của {product['name']} ({product['id']}): "
-                        f"{_join(product['ingredients'])}."
-                    ),
-                },
-                {
-                    **common,
-                    "section": "benefits",
-                    "content": (
-                        f"Công dụng của {product['name']} ({product['id']}): "
-                        f"{_join(product['benefits'])}."
-                    ),
-                },
-                {
-                    **common,
-                    "section": "usage",
-                    "content": (
-                        f"Cách dùng {product['name']} ({product['id']}): {product['usage']}"
-                    ),
-                },
-            ]
+            {
+                "product_id": product["id"],
+                "product_name": product["name"],
+                "section": section,
+                "content": content,
+            }
+            for section, content in sections.items()
         )
     return chunks
-
-
-def _normalize(text: str) -> str:
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    without_accents = "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", without_accents).split())
 
 
 def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]]:
@@ -93,7 +59,7 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
     seen: set[str] = set()
 
     for reference in references:
-        normalized_reference = _normalize(reference)
+        normalized_reference = normalize_product_reference(reference)
         if not normalized_reference:
             continue
 
@@ -101,8 +67,8 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
             (
                 product
                 for product in products
-                if normalized_reference == _normalize(product["id"])
-                or normalized_reference == _normalize(product["name"])
+                if normalized_reference == normalize_product_reference(product["id"])
+                or normalized_reference == normalize_product_reference(product["name"])
             ),
             None,
         )
@@ -110,7 +76,7 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
             substring_matches = [
                 product
                 for product in products
-                if normalized_reference in _normalize(product["name"])
+                if normalized_reference in normalize_product_reference(product["name"])
             ]
             if len(substring_matches) == 1:
                 exact = substring_matches[0]
@@ -118,10 +84,10 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
                 unresolved.append(reference)
                 continue
 
-        if exact is None:
+        if exact is None and products:
             candidates: list[tuple[float, dict[str, Any]]] = []
             for product in products:
-                normalized_name = _normalize(product["name"])
+                normalized_name = normalize_product_reference(product["name"])
                 score = SequenceMatcher(None, normalized_reference, normalized_name).ratio()
                 candidates.append((score, product))
             candidates.sort(key=lambda item: item[0], reverse=True)
@@ -195,7 +161,7 @@ class ProductVectorStore:
             return candidates[:top_k]
 
         # Khi so sánh nhiều SKU, giữ evidence cho từng sản phẩm thay vì để một SKU lấn át.
-        per_product = max(1, math.ceil(top_k / len(allowed_ids)))
+        per_product = math.ceil(top_k / len(allowed_ids))
         balanced: list[SearchResult] = []
         for product_id in product_ids or []:
             product_results = [

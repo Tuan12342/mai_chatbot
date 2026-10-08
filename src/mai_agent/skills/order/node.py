@@ -5,11 +5,10 @@ from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from mai_agent.catalog import find_product
-from mai_agent.config import get_settings
+from mai_agent.llm import invoke_tool
 from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
 from mai_agent.skills.order.tools import resolve_order_product
@@ -27,21 +26,13 @@ def _reply(
     session_update: dict[str, Any],
     **state_updates: Any,
 ) -> dict[str, Any]:
-    rendered_text = _generate_order_reply(text)
+    rendered_text = generate_reply(text, response_language=_ORDER_RESPONSE_LANGUAGE.get())
     return {
         "reply": rendered_text,
         "messages": [AIMessage(content=rendered_text)],
         "session": session_update,
         **state_updates,
     }
-
-
-def _generate_order_reply(business_context: str) -> str:
-    """Yêu cầu Gemini viết phản hồi từ kết quả nghiệp vụ đã được kiểm tra."""
-    return generate_reply(
-        business_context,
-        response_language=_ORDER_RESPONSE_LANGUAGE.get(),
-    )
 
 
 @tool
@@ -94,13 +85,6 @@ def cancel_order() -> str:
     return "cancel"
 
 
-ORDER_CONFIRMATION_TOOLS = [
-    confirm_order,
-    request_order_changes,
-    cancel_order,
-]
-
-
 @tool
 def accept_offer() -> str:
     """Khách đồng ý với đề nghị đang chờ trong bước hiện tại."""
@@ -127,9 +111,7 @@ class OrderRequestItem(BaseModel):
     )
     quantity_evidence: str = Field(
         default="",
-        description=(
-            "Đoạn nguyên văn thể hiện số lượng trong tin nhắn; để trống nếu chưa nêu"
-        ),
+        description=("Đoạn nguyên văn thể hiện số lượng trong tin nhắn; để trống nếu chưa nêu"),
     )
 
 
@@ -150,16 +132,20 @@ def provide_complete_order_request(
 ORDER_REQUEST_TOOLS = [provide_complete_order_request]
 BINARY_CHOICE_TOOLS = [accept_offer, decline_offer]
 
+
 def _has_quantity_evidence(text: str, evidence: str) -> bool:
     """Chỉ chấp nhận bằng chứng số lượng đứng độc lập, không nằm trong SKU."""
     normalized_evidence = " ".join(evidence.strip().split())
     if not normalized_evidence:
         return False
-    return re.search(
-        rf"(?<!\w){re.escape(normalized_evidence)}(?!\w)",
-        text,
-        flags=re.IGNORECASE,
-    ) is not None
+    return (
+        re.search(
+            rf"(?<!\w){re.escape(normalized_evidence)}(?!\w)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        is not None
+    )
 
 
 def _validated_quantity(text: str, item: dict[str, Any]) -> int | None:
@@ -230,7 +216,12 @@ def revise_order_before_confirmation(
     }
 
 
-ORDER_CONFIRMATION_TOOLS.append(revise_order_before_confirmation)
+ORDER_CONFIRMATION_TOOLS = [
+    confirm_order,
+    request_order_changes,
+    cancel_order,
+    revise_order_before_confirmation,
+]
 
 
 @tool
@@ -307,12 +298,8 @@ def _interpret_pending_selection(
     candidates: list[dict[str, str]],
 ) -> tuple[str, str | None]:
     """Để Gemini chọn hành động tiếp theo bằng tool calling."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(SELECTION_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        SELECTION_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -326,16 +313,11 @@ def _interpret_pending_selection(
                 )
             ),
             HumanMessage(
-                content=(
-                    f"Danh sách vừa giới thiệu: {candidates}\n"
-                    f"Tin nhắn mới nhất: {text}"
-                )
+                content=(f"Danh sách vừa giới thiệu: {candidates}\nTin nhắn mới nhất: {text}")
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động cho bước chọn sản phẩm.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động cho bước chọn sản phẩm.")
-    call = response.tool_calls[0]
     if call["name"] == "choose_offered_product":
         return "choose", call["args"]["product_id"]
     if call["name"] == "ask_for_other_products":
@@ -355,12 +337,8 @@ def _interpret_order_confirmation(
     order_summary: dict[str, Any],
 ) -> tuple[str, Any]:
     """Để Gemini hiểu câu xác nhận, sửa hoặc hủy đơn bằng tool calling."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(ORDER_CONFIRMATION_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        ORDER_CONFIRMATION_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -374,16 +352,11 @@ def _interpret_order_confirmation(
                 )
             ),
             HumanMessage(
-                content=(
-                    f"Đơn đang chờ xác nhận: {order_summary}\n"
-                    f"Tin nhắn mới nhất: {text}"
-                )
+                content=(f"Đơn đang chờ xác nhận: {order_summary}\nTin nhắn mới nhất: {text}")
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động xác nhận đơn hàng.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động xác nhận đơn hàng.")
-    call = response.tool_calls[0]
     if call["name"] == "confirm_order":
         return "confirm", None
     if call["name"] == "cancel_order":
@@ -397,12 +370,8 @@ def _interpret_order_confirmation(
 
 def _interpret_binary_choice(text: str, pending_offer: str) -> bool:
     """Để Gemini hiểu khách đồng ý hay từ chối đề nghị đang chờ."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(BINARY_CHOICE_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        BINARY_CHOICE_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -411,14 +380,11 @@ def _interpret_binary_choice(text: str, pending_offer: str) -> bool:
                     "trả lời khách."
                 )
             ),
-            HumanMessage(
-                content=f"Đề nghị đang chờ: {pending_offer}\nTin nhắn khách: {text}"
-            ),
-        ]
+            HumanMessage(content=f"Đề nghị đang chờ: {pending_offer}\nTin nhắn khách: {text}"),
+        ],
+        error_message="Gemini không chọn hành động đồng ý hoặc từ chối.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động đồng ý hoặc từ chối.")
-    tool_name = response.tool_calls[0]["name"]
+    tool_name = call["name"]
     if tool_name == "accept_offer":
         return True
     if tool_name == "decline_offer":
@@ -431,12 +397,8 @@ def _interpret_order_request(
     offered_candidates: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Để Gemini trích sản phẩm và số lượng thay cho luật từ khóa."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(ORDER_REQUEST_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        ORDER_REQUEST_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -453,10 +415,7 @@ def _interpret_order_request(
                     "'loại 1', 'loại 2'..., ánh xạ theo đúng thứ tự danh sách đã giới "
                     "thiệu và trả mã SKU tương ứng. Không tự trả lời khách."
                     "- “loại này”, “sản phẩm này” là sản phẩm vừa được tư vấn gần nhất. "
-                    "- “loại 1”, “loại 2” ánh xạ theo thứ tự offered_candidates. "
-                    "- Mỗi sản phẩm phải tạo một item riêng. "
-                    "- Không cộng số lượng của nhiều sản phẩm. "
-                    "Chuyển số lượng viết bằng chữ thành số. Ví dụ 'I want to buy "
+                    "Ví dụ 'I want to buy "
                     "OA Purifying Gel' phải có quantity=null; 'I want to buy two OA "
                     "Purifying Gel' có quantity=2 và quantity_evidence='two'."
                     "Chỉ điền address khi khách thực sự cung cấp địa chỉ. "
@@ -471,11 +430,9 @@ def _interpret_order_request(
                     f"Tin nhắn khách: {text}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không trích được yêu cầu đặt hàng.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không trích được yêu cầu đặt hàng.")
-    call = response.tool_calls[0]
     if call["name"] != "provide_complete_order_request":
         raise RuntimeError(f"Gemini gọi tool không được hỗ trợ: {call['name']}")
     args = call["args"]
@@ -488,7 +445,7 @@ def _interpret_order_request(
             }
             for item in items
         ],
-         "address": " ".join(str(args.get("address", "")).split()),
+        "address": " ".join(str(args.get("address", "")).split()),
         "phone": str(args.get("phone", "")).strip(),
     }
 
@@ -499,12 +456,8 @@ def _interpret_partial_stock_response(
     offered_candidates: list[dict[str, str]],
 ) -> dict[str, Any]:
     """Để Gemini xử lý đồng ý, từ chối hoặc sửa yêu cầu khi thiếu hàng."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(PARTIAL_STOCK_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        PARTIAL_STOCK_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -524,11 +477,9 @@ def _interpret_partial_stock_response(
                     f"Tin nhắn khách: {text}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động xử lý số lượng còn lại.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động xử lý số lượng còn lại.")
-    call = response.tool_calls[0]
     if call["name"] == "accept_available_stock":
         return {"action": "accept"}
     if call["name"] == "decline_available_stock":
@@ -551,9 +502,7 @@ def _process_multi_item_order(
         reference = item.get("product_reference")
         quantity = item.get("quantity")
         if not reference or not isinstance(quantity, int) or quantity <= 0:
-            resolution_errors.append(
-                f"Yêu cầu chưa đủ tên/mã và số lượng hợp lệ: {item}."
-            )
+            resolution_errors.append(f"Yêu cầu chưa đủ tên/mã và số lượng hợp lệ: {item}.")
             continue
 
         resolution = resolve_order_product(reference)
@@ -561,12 +510,8 @@ def _process_multi_item_order(
             resolution_errors.append(f"Không tìm thấy sản phẩm: {reference}.")
             continue
         if resolution["status"] == "ambiguous":
-            choices = ", ".join(
-                candidate["product_id"] for candidate in resolution["candidates"]
-            )
-            resolution_errors.append(
-                f"Sản phẩm {reference} còn mơ hồ; các mã phù hợp: {choices}."
-            )
+            choices = ", ".join(candidate["product_id"] for candidate in resolution["candidates"])
+            resolution_errors.append(f"Sản phẩm {reference} còn mơ hồ; các mã phù hợp: {choices}.")
             continue
 
         product = resolution["product"]
@@ -574,9 +519,7 @@ def _process_multi_item_order(
             resolution_errors.append(f"Chưa xác định được sản phẩm: {reference}.")
             continue
         product_id = product["product_id"]
-        resolved_quantities[product_id] = (
-            resolved_quantities.get(product_id, 0) + quantity
-        )
+        resolved_quantities[product_id] = resolved_quantities.get(product_id, 0) + quantity
 
     if resolution_errors:
         return _reply(
@@ -586,22 +529,13 @@ def _process_multi_item_order(
             {
                 "current_step": "selecting_product",
                 "cart": cart,
-                "pending_order_items": requested_items,
             },
         )
 
-    customer = state.get("customer", {})
     checked_items: list[dict[str, Any]] = []
     stock_errors: list[str] = []
     for product_id, quantity in resolved_quantities.items():
-        stock = check_product_stock.invoke(
-            {
-                "product_id": product_id,
-                "quantity": quantity,
-                "skin_type": customer.get("skin_type"),
-                "excluded_ingredients": customer.get("excluded_ingredients", []),
-            }
-        )
+        stock = _check_stock(state, product_id, quantity)
         if stock["status"] == "available":
             checked_items.append(
                 {
@@ -613,8 +547,7 @@ def _process_multi_item_order(
             )
         elif stock["status"] == "partial_stock":
             stock_errors.append(
-                f"{product_id}: yêu cầu {quantity}, hiện chỉ còn "
-                f"{stock['current_stock']}."
+                f"{product_id}: yêu cầu {quantity}, hiện chỉ còn {stock['current_stock']}."
             )
         else:
             stock_errors.append(f"{product_id}: hiện đã hết hàng.")
@@ -627,7 +560,6 @@ def _process_multi_item_order(
             {
                 "current_step": "selecting_product",
                 "cart": cart,
-                "pending_order_items": requested_items,
             },
         )
 
@@ -639,7 +571,6 @@ def _process_multi_item_order(
             "current_step": "collecting_address",
             "cart": updated_cart,
             "pending_product_candidates": [],
-            "pending_order_items": [],
         },
     )
 
@@ -649,12 +580,8 @@ def _interpret_address_step(
     cart: list[dict[str, Any]],
     offered_candidates: list[dict[str, str]],
 ) -> dict[str, Any]:
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(ADDRESS_STEP_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        ADDRESS_STEP_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -675,11 +602,9 @@ def _interpret_address_step(
                     f"Tin nhắn khách: {text}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động tại bước địa chỉ.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động tại bước địa chỉ.")
-    call = response.tool_calls[0]
     if call["name"] == "provide_shipping_details":
         return {"action": "shipping", **call["args"]}
     if call["name"] == "modify_cart":
@@ -695,12 +620,8 @@ def _interpret_order_control(
     cart: list[dict[str, Any]],
 ) -> str:
     """Nhận diện yêu cầu hủy toàn bộ ở mọi bước của đơn đang làm."""
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(ORDER_CONTROL_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        ORDER_CONTROL_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -713,15 +634,13 @@ def _interpret_order_control(
             ),
             HumanMessage(
                 content=(
-                    f"Bước hiện tại: {current_step}\nGiỏ hiện tại: {cart}\n"
-                    f"Tin nhắn khách: {text}"
+                    f"Bước hiện tại: {current_step}\nGiỏ hiện tại: {cart}\nTin nhắn khách: {text}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động tiếp tục hoặc hủy đơn.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động tiếp tục hoặc hủy đơn.")
-    tool_name = response.tool_calls[0]["name"]
+    tool_name = call["name"]
     if tool_name == "cancel_entire_order_flow":
         return "cancel"
     if tool_name == "continue_order_flow":
@@ -739,12 +658,10 @@ def _clean_cancelled_order_session() -> dict[str, Any]:
         "pending_product_candidates": [],
         "last_product_candidates": [],
         "pending_quantity": None,
-        "pending_order_items": [],
         "pending_shipping_address": None,
         "pending_phone": None,
         "pending_available_quantity": None,
         "pending_cart_revision": [],
-        "cart_revision_reason": None,
         "pending_revised_shipping_address": None,
         "pending_revised_phone": None,
     }
@@ -762,6 +679,7 @@ def _normalize_phone(phone: str) -> str | None:
     if re.fullmatch(r"(?:\+?84|0)\d{8,9}", normalized):
         return normalized
     return None
+
 
 def _resolve_shipping_slots(
     parsed: dict[str, Any],
@@ -790,12 +708,8 @@ def _interpret_cart_revision_confirmation(
     original_cart: list[dict[str, Any]],
     revised_cart: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    settings = get_settings()
-    model = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        api_key=settings.google_api_key,
-    ).bind_tools(CART_REVISION_TOOLS, tool_choice="any")
-    response = model.invoke(
+    call = invoke_tool(
+        CART_REVISION_TOOLS,
         [
             SystemMessage(
                 content=(
@@ -811,15 +725,12 @@ def _interpret_cart_revision_confirmation(
             ),
             HumanMessage(
                 content=(
-                    f"Giỏ cũ: {original_cart}\nGiỏ sửa: {revised_cart}\n"
-                    f"Tin nhắn khách: {text}"
+                    f"Giỏ cũ: {original_cart}\nGiỏ sửa: {revised_cart}\nTin nhắn khách: {text}"
                 )
             ),
-        ]
+        ],
+        error_message="Gemini không chọn hành động xác nhận giỏ sửa.",
     )
-    if not response.tool_calls:
-        raise RuntimeError("Gemini không chọn hành động xác nhận giỏ sửa.")
-    call = response.tool_calls[0]
     if call["name"] == "confirm_cart_revision":
         return {"action": "confirm"}
     if call["name"] == "discard_cart_revision":
@@ -839,7 +750,6 @@ def _prepare_cart_revision(
     original_cart: list[dict[str, Any]],
     base_cart: list[dict[str, Any]],
     changes: list[dict[str, Any]],
-    reason: str,
     revised_address: str | None = None,
     revised_phone: str | None = None,
 ) -> dict[str, Any]:
@@ -923,16 +833,8 @@ def _prepare_cart_revision(
     if not revised_cart:
         errors.append("Giỏ hàng sau khi sửa không được để trống.")
 
-    customer = state.get("customer", {})
     for item in revised_cart:
-        stock = check_product_stock.invoke(
-            {
-                "product_id": item["product_id"],
-                "quantity": item["quantity"],
-                "skin_type": customer.get("skin_type"),
-                "excluded_ingredients": customer.get("excluded_ingredients", []),
-            }
-        )
+        stock = _check_stock(state, item["product_id"], item["quantity"])
         if stock["status"] == "partial_stock":
             errors.append(
                 f"{item['product_id']} yêu cầu {item['quantity']}, chỉ còn "
@@ -975,17 +877,47 @@ def _prepare_cart_revision(
             "current_step": "confirming_cart_revision",
             "cart": original_cart,
             "pending_cart_revision": revised_cart,
-            "cart_revision_reason": reason,
             "pending_revised_shipping_address": revised_address,
             "pending_revised_phone": revised_phone,
         },
     )
 
 
-def order_node(state: AgentState) -> dict[str, Any]:
-    _ORDER_RESPONSE_LANGUAGE.set(
-        state.get("session", {}).get("language_code", "vi")
+def _check_stock(state: AgentState, product_id: str, quantity: int) -> dict[str, Any]:
+    customer = state.get("customer", {})
+    return check_product_stock.invoke(
+        {
+            "product_id": product_id,
+            "quantity": quantity,
+            "skin_type": customer.get("skin_type"),
+            "excluded_ingredients": customer.get("excluded_ingredients", []),
+        }
     )
+
+
+def _create_confirmed_order(
+    state: AgentState,
+    cart: list[dict[str, Any]],
+    address: str,
+    phone: str,
+) -> dict[str, Any]:
+    return {
+        "order_id": f"ORDER-{uuid.uuid4().hex[:8].upper()}",
+        "customer_id": state.get("user_id", "anonymous"),
+        "items": cart,
+        "shipping_address": {
+            "address_id": "pending",
+            "address_line": address,
+            "phone": phone,
+        },
+        "status": "confirmed",
+        "payment_status": "pending",
+        "total_amount": sum(item["quantity"] * item["unit_price"] for item in cart),
+    }
+
+
+def order_node(state: AgentState) -> dict[str, Any]:
+    _ORDER_RESPONSE_LANGUAGE.set(state.get("session", {}).get("language_code", "vi"))
     text = latest_user_text(state)
     session = state.get("session", {})
     current_step = session.get("current_step", "idle")
@@ -1052,23 +984,11 @@ def order_node(state: AgentState) -> dict[str, Any]:
             revised_address = session.get("pending_revised_shipping_address")
             revised_phone = session.get("pending_revised_phone")
             if revised_address and revised_phone:
-                total = sum(
-                    item["quantity"] * item["unit_price"] for item in revised_cart
+                active_order = _create_confirmed_order(
+                    state, revised_cart, revised_address, revised_phone
                 )
-                order_id = f"ORDER-{uuid.uuid4().hex[:8].upper()}"
-                active_order = {
-                    "order_id": order_id,
-                    "customer_id": state.get("user_id", "anonymous"),
-                    "items": revised_cart,
-                    "shipping_address": {
-                        "address_id": "pending",
-                        "address_line": revised_address,
-                        "phone": revised_phone,
-                    },
-                    "status": "confirmed",
-                    "payment_status": "pending",
-                    "total_amount": total,
-                }
+                order_id = active_order["order_id"]
+                total = active_order["total_amount"]
                 return _reply(
                     f"Bản sửa đã được áp dụng và đơn {order_id} đã được xác nhận; "
                     f"tổng tiền {total:,} đồng; địa chỉ {revised_address}; số điện "
@@ -1078,7 +998,6 @@ def order_node(state: AgentState) -> dict[str, Any]:
                         "current_step": "idle",
                         "cart": [],
                         "pending_cart_revision": [],
-                        "cart_revision_reason": None,
                         "pending_shipping_address": None,
                         "pending_phone": None,
                         "pending_revised_shipping_address": None,
@@ -1094,7 +1013,6 @@ def order_node(state: AgentState) -> dict[str, Any]:
                     "current_step": "collecting_address",
                     "cart": revised_cart,
                     "pending_cart_revision": [],
-                    "cart_revision_reason": None,
                     "pending_shipping_address": None,
                     "pending_phone": None,
                     "pending_revised_shipping_address": None,
@@ -1109,22 +1027,19 @@ def order_node(state: AgentState) -> dict[str, Any]:
                     "current_step": "collecting_address",
                     "cart": cart,
                     "pending_cart_revision": [],
-                    "cart_revision_reason": None,
                     "pending_revised_shipping_address": None,
                     "pending_revised_phone": None,
                 },
             )
 
-        supplied_address = " ".join(
-            str(revision_action.get("address", "")).split()
-        )
+        supplied_address = " ".join(str(revision_action.get("address", "")).split())
         supplied_phone_text = str(revision_action.get("phone", ""))
         if supplied_address and not _is_valid_shipping_address(supplied_address):
             return _reply(
                 "Địa chỉ mới không hợp lệ. Hỏi khách cung cấp lại địa "
                 "chỉ giao hàng có tên đường hoặc khu vực. Không áp dụng "
                 "bất kỳ thay đổi nào và chưa xác nhận đơn.",
-                {**session, "current_step": "confirming_cart_revision"},
+                {"current_step": "confirming_cart_revision"},
             )
 
         supplied_phone = (
@@ -1135,19 +1050,16 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 "Số điện thoại mới không hợp lệ. Hỏi khách cung cấp "
                 "lại số điện thoại hợp lệ. Không áp dụng bất kỳ thay "
                 "đổi nào và chưa xác nhận đơn.",
-                {**session, "current_step": "confirming_cart_revision"},
+                {"current_step": "confirming_cart_revision"},
             )
 
-        revised_address = supplied_address or session.get(
-            "pending_revised_shipping_address"
-        )
+        revised_address = supplied_address or session.get("pending_revised_shipping_address")
         revised_phone = supplied_phone or session.get("pending_revised_phone")
         return _prepare_cart_revision(
             state,
             original_cart=cart,
             base_cart=revised_cart,
             changes=revision_action["changes"],
-            reason=text,
             revised_address=revised_address,
             revised_phone=revised_phone,
         )
@@ -1164,12 +1076,10 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 original_cart=cart,
                 base_cart=cart,
                 changes=address_action["changes"],
-                reason=text,
             )
         if address_action["action"] == "cancel":
             return _reply(
-                "Khách yêu cầu hủy toàn bộ đơn đang đặt. Xác nhận đã hủy và xóa "
-                "giỏ hàng đang chờ.",
+                "Khách yêu cầu hủy toàn bộ đơn đang đặt. Xác nhận đã hủy và xóa giỏ hàng đang chờ.",
                 {
                     "current_step": "idle",
                     "cart": [],
@@ -1179,55 +1089,8 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 },
             )
 
-        supplied_address = " ".join(
-            str(address_action.get("address", "")).split()
-        )
-        phone_text = str(address_action.get("phone", ""))
-        phone_match = re.fullmatch(r"(?:\+?84|0)\d{8,9}", phone_text)
-        supplied_phone = phone_match.group(0) if phone_match else None
-
-        saved_address = str(session.get("pending_shipping_address") or "")
-        address = (
-            supplied_address
-            if _is_valid_shipping_address(supplied_address)
-            else saved_address if _is_valid_shipping_address(saved_address) else None
-        )
-        phone = supplied_phone or session.get("pending_phone")
-
-        missing_fields = []
-        if not address:
-            missing_fields.append("địa chỉ giao hàng có tên đường/khu vực")
-        if not phone:
-            missing_fields.append("số điện thoại hợp lệ")
-        if missing_fields:
-            return _reply(
-                "Đã lưu các thông tin giao hàng hợp lệ khách vừa cung cấp. Còn thiếu: "
-                f"{', '.join(missing_fields)}. Hỏi khách chỉ cung cấp phần còn thiếu. "
-                "Không được dùng số điện thoại làm địa chỉ.",
-                {
-                    "current_step": "collecting_address",
-                    "cart": cart,
-                    "pending_shipping_address": address,
-                    "pending_phone": phone,
-                },
-            )
-
-        total_amount = sum(item["quantity"] * item["unit_price"] for item in cart)
-        item_summary = ", ".join(
-            f"{item['product_id']} - {item['product_name']} x{item['quantity']}"
-            for item in cart
-        )
-        return _reply(
-            f"Đọc lại đơn để khách xác nhận: {item_summary}; tổng tiền "
-            f"{total_amount:,} đồng; địa chỉ {address}; số điện thoại {phone}. "
-            "Hỏi khách có xác nhận đặt đơn không.",
-            {
-                "current_step": "confirming_order",
-                "cart": cart,
-                "pending_shipping_address": address,
-                "pending_phone": phone,
-            },
-        )
+        address, phone = _resolve_shipping_slots(address_action, session)
+        return _reply_after_cart_ready(cart, address, phone)
 
     if current_step == "confirming_order":
         address = session.get("pending_shipping_address", "")
@@ -1246,20 +1109,17 @@ def order_node(state: AgentState) -> dict[str, Any]:
         if confirmation_action == "revise_slots":
             revision = change_request or {}
             supplied_address = " ".join(str(revision.get("address", "")).split())
-            supplied_phone = str(revision.get("phone", ""))
+            phone_text = str(revision.get("phone", "")).strip()
+            supplied_phone = _normalize_phone(phone_text)
             if supplied_address and not _is_valid_shipping_address(supplied_address):
                 return _reply(
                     "Địa chỉ mới chưa hợp lệ vì không có đủ nội dung chữ. Hỏi khách "
                     "cung cấp lại địa chỉ; chưa thay đổi đơn.",
                     {"current_step": "confirming_order", "cart": cart},
                 )
-            if supplied_phone and not re.fullmatch(
-                r"(?:\+?84|0)\d{9,10}",
-                supplied_phone,
-            ):
+            if phone_text and supplied_phone is None:
                 return _reply(
-                    "Số điện thoại mới sai định dạng. Hỏi khách cung cấp lại; chưa "
-                    "thay đổi đơn.",
+                    "Số điện thoại mới sai định dạng. Hỏi khách cung cấp lại; chưa thay đổi đơn.",
                     {"current_step": "confirming_order", "cart": cart},
                 )
             return _prepare_cart_revision(
@@ -1267,26 +1127,13 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 original_cart=cart,
                 base_cart=cart,
                 changes=revision.get("changes", []),
-                reason=text,
                 revised_address=supplied_address or address,
                 revised_phone=supplied_phone or phone,
             )
 
         if confirmation_action == "confirm":
-            order_id = f"ORDER-{uuid.uuid4().hex[:8].upper()}"
-            active_order = {
-                "order_id": order_id,
-                "customer_id": state.get("user_id", "anonymous"),
-                "items": cart,
-                "shipping_address": {
-                    "address_id": "pending",
-                    "address_line": address,
-                    "phone": phone,
-                },
-                "status": "confirmed",
-                "payment_status": "pending",
-                "total_amount": total_amount,
-            }
+            active_order = _create_confirmed_order(state, cart, address, phone)
+            order_id = active_order["order_id"]
             return _reply(
                 f"Đơn {order_id} đã được xác nhận, tổng tiền {total_amount:,} đồng. "
                 "Thông báo đặt đơn thành công.",
@@ -1425,17 +1272,7 @@ def order_node(state: AgentState) -> dict[str, Any]:
                             "pending_quantity": additional_quantity,
                         },
                     )
-                additional_stock = check_product_stock.invoke(
-                    {
-                        "product_id": additional_product_id,
-                        "quantity": additional_quantity,
-                        "skin_type": state.get("customer", {}).get("skin_type"),
-                        "excluded_ingredients": state.get("customer", {}).get(
-                            "excluded_ingredients",
-                            [],
-                        ),
-                    }
-                )
+                additional_stock = _check_stock(state, additional_product_id, additional_quantity)
                 if additional_stock["status"] == "partial_stock":
                     current_stock = additional_stock["current_stock"]
                     return _reply(
@@ -1582,8 +1419,7 @@ def order_node(state: AgentState) -> dict[str, Any]:
 
     if product_resolution["status"] == "not_found":
         return _reply(
-            "Em chưa tìm thấy sản phẩm này. "
-            "Mình kiểm tra lại tên hoặc mã sản phẩm giúp em nhé.",
+            "Em chưa tìm thấy sản phẩm này. Mình kiểm tra lại tên hoặc mã sản phẩm giúp em nhé.",
             {
                 "current_step": "selecting_product",
                 "cart": cart,
@@ -1628,14 +1464,10 @@ def order_node(state: AgentState) -> dict[str, Any]:
             product["id"]
             for product in candidate_products
             if skin_type
-            and (
-                skin_type in product["skin_types"]
-                or "mọi loại da" in product["skin_types"]
-            )
+            and (skin_type in product["skin_types"] or "mọi loại da" in product["skin_types"])
         ]
         recommendation = (
-            f" Theo hồ sơ da {skin_type} của khách, ưu tiên gợi ý "
-            f"{', '.join(recommended_ids)}."
+            f" Theo hồ sơ da {skin_type} của khách, ưu tiên gợi ý {', '.join(recommended_ids)}."
             if recommended_ids
             else ""
         )
@@ -1678,19 +1510,7 @@ def order_node(state: AgentState) -> dict[str, Any]:
             },
         )
 
-    customer = state.get("customer", {})
-
-    stock_result = check_product_stock.invoke(
-        {
-            "product_id": selected_product["product_id"],
-            "quantity": quantity,
-            "skin_type": customer.get("skin_type"),
-            "excluded_ingredients": customer.get(
-                "excluded_ingredients",
-                [],
-            ),
-        }
-    )
+    stock_result = _check_stock(state, selected_product["product_id"], quantity)
 
     if stock_result["status"] == "partial_stock":
         current_stock = stock_result["current_stock"]
@@ -1712,9 +1532,7 @@ def order_node(state: AgentState) -> dict[str, Any]:
         alternatives = stock_result.get("alternatives", [])
         if alternatives:
             recommended_product = alternatives[0]
-            alternative_text = ", ".join(
-                f"{item['id']} - {item['name']}" for item in alternatives
-            )
+            alternative_text = ", ".join(f"{item['id']} - {item['name']}" for item in alternatives)
             reply = (
                 f"{selected_product['product_name']} hiện đã hết hàng. "
                 f"Em gợi ý: {alternative_text}. Hỏi khách có muốn xem sản phẩm "
@@ -1729,13 +1547,9 @@ def order_node(state: AgentState) -> dict[str, Any]:
         return _reply(
             reply,
             {
-                "current_step": (
-                    "confirming_alternative" if alternatives else "selecting_product"
-                ),
+                "current_step": ("confirming_alternative" if alternatives else "selecting_product"),
                 "cart": cart,
-                "pending_product_id": (
-                    recommended_product["id"] if alternatives else None
-                ),
+                "pending_product_id": (recommended_product["id"] if alternatives else None),
             },
         )
 
@@ -1762,13 +1576,9 @@ def _reply_after_cart_ready(
     phone: str | None,
 ) -> dict[str, Any]:
     if address and phone:
-        total_amount = sum(
-            item["quantity"] * item["unit_price"] for item in cart
-        )
+        total_amount = sum(item["quantity"] * item["unit_price"] for item in cart)
         item_summary = ", ".join(
-            f"{item['product_id']} - {item['product_name']} "
-            f"x{item['quantity']}"
-            for item in cart
+            f"{item['product_id']} - {item['product_name']} x{item['quantity']}" for item in cart
         )
 
         return _reply(
@@ -1786,13 +1596,15 @@ def _reply_after_cart_ready(
 
     missing_fields = []
     if not address:
-        missing_fields.append("địa chỉ giao hàng")
+        missing_fields.append("địa chỉ giao hàng có tên đường/khu vực")
     if not phone:
-        missing_fields.append("số điện thoại")
+        missing_fields.append("số điện thoại hợp lệ")
 
     return _reply(
         "Đã kiểm tra sản phẩm và số lượng. "
-        f"Hỏi khách cung cấp phần còn thiếu: {', '.join(missing_fields)}.",
+        "Đã lưu thông tin giao hàng hợp lệ. "
+        f"Hỏi khách cung cấp phần còn thiếu: {', '.join(missing_fields)}. "
+        "Không được dùng số điện thoại làm địa chỉ.",
         {
             "current_step": "collecting_address",
             "cart": cart,

@@ -15,10 +15,6 @@ def load_customers() -> list[dict[str, Any]]:
 
 def find_customer_by_zalo_id(zalo_user_id: str) -> dict[str, Any] | None:
     return next(
-        (
-            customer
-            for customer in load_customers()
-            if customer["zalo_user_id"] == zalo_user_id
-        ),
+        (customer for customer in load_customers() if customer["zalo_user_id"] == zalo_user_id),
         None,
     )
