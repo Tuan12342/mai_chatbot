@@ -1,58 +1,52 @@
-# Mai Agent
 
-## Cách chạy
-
-Yêu cầu: Python 3.11 trở lên và [uv](https://docs.astral.sh/uv/).
-
-### 1. Cài đặt thư viện
+## Chạy giao diện web
 
 ```bash
 uv sync
-```
-
-### 2. Cấu hình môi trường
-
-Linux/macOS:
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Mở file `.env` và điền Gemini API key:
-
-```env
-GOOGLE_API_KEY=your_api_key
-```
-
-### 3. Chạy giao diện web
-
-```bash
 uv run mai-agent-web
 ```
 
-Mở `http://127.0.0.1:8000` trên trình duyệt.
+Mở `http://127.0.0.1:8000`. Giao diện thử nghiệm dùng một người dùng cố định và chưa có
+đăng nhập; lịch sử được giữ trong RAM khi server còn chạy.
 
-Để sử dụng cổng khác:
+Nếu port 8000 đang được dùng:
 
 ```bash
 MAI_AGENT_WEB_PORT=8765 uv run mai-agent-web
 ```
 
-Trên Windows PowerShell:
+## Luồng graph
+
+```text
+START
+  → classify_intent
+      ├── product_question/recommendation → assistant → END
+      ├── order → order → END
+      └── unknown → fallback → END
+```
+
+LangGraph quản lý state, routing và vòng lặp product tool. LangChain gọi Gemini trong node
+`assistant`.
+
+## Cài đặt
 
 ```powershell
-$env:MAI_AGENT_WEB_PORT=8765
-uv run mai-agent-web
+cd E:\1\mai-agent-langgraph
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+Copy-Item .env.example .env
 ```
 
-### Chạy trong terminal
+## Chạy agent
 
-```bash
-uv run mai-agent
+```powershell
+mai-agent
 ```
+
+
+
+
+
+
+
