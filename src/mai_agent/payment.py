@@ -20,9 +20,6 @@ def build_vietqr_payment(
     settings: Settings | None = None,
 ) -> PaymentInfo | None:
     """Tạo thông tin VietQR cho một đơn đang chờ thanh toán.
-
-    Trả về ``None`` khi chủ shop chưa cấu hình đủ thông tin tài khoản, nhờ đó
-    ứng dụng không bao giờ hiển thị một mã QR mẫu có thể khiến khách chuyển nhầm.
     """
     settings = settings or get_settings()
     bank_id = settings.vietqr_bank_id.strip()

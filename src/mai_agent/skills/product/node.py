@@ -10,8 +10,17 @@ from mai_agent.state import AgentState
 
 def assistant_node(state: AgentState) -> dict[str, Any]:
     customer = state.get("customer", {})
-    response_language = state.get("session", {}).get("language_code", "vi")
+    session = state.get("session", {})
+    response_language = session.get("language_code", "vi")
     language_name = "English" if response_language == "en" else "Vietnamese"
+    pending_product_reference = session.get("pending_product_reference")
+    pending_product_context = (
+        f"Sản phẩm đang được chọn trong luồng đặt hàng: {pending_product_reference}. "
+        "Khi khách nói 'sản phẩm này', 'loại này' hoặc cách gọi tương tự, dùng mã này "
+        "để tra cứu. Chỉ tư vấn ở lượt hiện tại và giữ nguyên tiến trình đặt hàng."
+        if pending_product_reference
+        else "Không có sản phẩm nào đang chờ trong luồng đặt hàng."
+    )
     profile_context = (
         "Hồ sơ được hệ thống nạp cho đúng Zalo user hiện tại:\n"
         f"- Loại da: {customer.get('skin_type', 'chưa biết')}\n"
@@ -26,6 +35,7 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             "Dù ngôn ngữ trả lời thay đổi, phải tiếp tục dùng hồ sơ, lịch sử và "
             "trạng thái phiên đã có. Không dịch SKU, tên riêng sản phẩm, thương hiệu "
             "hoặc tên thành phần INCI trong kết quả công cụ.\n"
+            f"{pending_product_context}\n"
             "Quy tắc sử dụng công cụ:\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
             "độ phù hợp hoặc so sánh sản phẩm.\n"

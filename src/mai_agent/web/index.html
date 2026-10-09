@@ -155,7 +155,9 @@
         const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:activeSessionId,message:clean})});
         const data=await response.json(); typing.remove();
         if(!response.ok)throw new Error(data.detail||"Không thể gửi tin nhắn.");
-        if(data.reply)addMessage("assistant",data.reply); addPaymentCard(data.payment); updateStatus(data); await refreshSessions();
+        addPaymentCard(data.payment);
+        if(data.reply)addMessage("assistant",data.reply);
+        updateStatus(data); await refreshSessions();
       }catch(error){ typing.remove(); addMessage("assistant",error.message||"Có lỗi xảy ra. Vui lòng thử lại."); }
       finally{ setBusy(false); input.focus(); }
     }

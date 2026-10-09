@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from langchain_core.messages import AIMessage, HumanMessage
+from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 
@@ -68,8 +69,21 @@ class ChatSession(BaseModel):
     updated_at: str
 
 
-def _graph_config(session_id: str) -> dict[str, dict[str, str]]:
-    return {"configurable": {"thread_id": session_id}}
+def _graph_config(session_id: str) -> dict[str, Any]:
+    return {
+        "configurable": {
+            "thread_id": session_id,
+        },
+        "callbacks": [
+            CallbackHandler(),
+        ],
+        "run_name": "mai-chat-turn",
+        "metadata": {
+            "langfuse_user_id": USER_ID,
+            "langfuse_session_id": session_id,
+            "langfuse_tags": ["mai-agent", "web"],
+        },
+    }
 
 
 def _invoke_graph(message: str, session_id: str) -> dict[str, Any]:

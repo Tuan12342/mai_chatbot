@@ -1,3 +1,4 @@
+
 from typing import Any, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -163,7 +164,11 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
     raise RuntimeError(f"Gemini gọi scope tool không được hỗ trợ: {tool_name}")
 
 
-def _interpret_intent(text: str) -> Intent:
+def _interpret_intent(
+    text: str,
+    current_step: str,
+    pending_context: dict[str, Any],
+) -> Intent:
     call = invoke_tool(
         ROUTING_TOOLS,
         [
@@ -176,10 +181,22 @@ def _interpret_intent(text: str) -> Intent:
                     "'lấy 5 chai loại này và 10 OA003' bắt buộc là route_order. "
                     "Nếu khách chỉ hỏi thông tin thì chọn route_product_question. "
                     "Nếu khách cần lựa chọn sản phẩm theo da hoặc cung cấp thêm đặc "
-                    "điểm da để tiếp tục tư vấn thì chọn route_recommendation."
+                    "điểm da để tiếp tục tư vấn thì chọn route_recommendation. "
+                    "Nếu đơn đang nhập dở, hãy hiểu tin nhắn dựa trên bước hiện tại "
+                    "và dữ liệu đang chờ. Chọn route_order khi khách đang cung cấp, "
+                    "xác nhận, sửa, từ chối hoặc hủy thông tin của đơn. Nếu khách đổi "
+                    "sang hỏi sản phẩm hoặc cần tư vấn thì chọn đúng intent tương ứng. "
+                    "Nếu chưa xác định được thì chọn route_unknown; không mặc định "
+                    "route_order chỉ vì đơn đang nhập dở."
                 )
             ),
-            HumanMessage(content=text),
+            HumanMessage(
+                content=(
+                    f"Bước hội thoại hiện tại: {current_step}\n"
+                    f"Dữ liệu đơn đang chờ: {pending_context}\n"
+                    f"Tin nhắn khách: {text}"
+                )
+            ),
         ],
         error_message="Gemini không chọn intent cho tin nhắn.",
     )
@@ -203,10 +220,13 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
         current_step = "idle"
     if _is_out_of_scope(text, current_step):
         intent: Intent = "unknown"
-    elif current_step != "idle":
-        intent = "order"
     else:
-        intent = _interpret_intent(text)
+        pending_context = {
+            key: value
+            for key, value in session.items()
+            if key.startswith("pending_") and value not in (None, "", [])
+        }
+        intent = _interpret_intent(text, current_step, pending_context)
     session_update: SessionState = {
         "session_id": session.get("session_id", state.get("user_id", "anonymous")),
         "language_code": session.get("language_code", "vi"),
@@ -222,6 +242,23 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
 
 
 def fallback_node(state: AgentState) -> dict[str, Any]:
+    session = state.get("session", {})
+    current_step = session.get("current_step", "idle")
+    if current_step != "idle":
+        pending_context = {
+            key: value
+            for key, value in session.items()
+            if key.startswith("pending_") and value not in (None, "", [])
+        }
+        reply = generate_reply(
+            "Chưa xác định được khách muốn tiếp tục đơn hay chuyển sang yêu cầu khác. "
+            "Không tự suy diễn, không thay đổi giỏ và không xóa dữ liệu đã thu thập. "
+            f"Bước hiện tại là {current_step}; dữ liệu đang chờ là {pending_context}. "
+            "Nói rằng tiến trình vẫn được giữ và hỏi một câu ngắn để khách làm rõ ý định.",
+            response_language=session.get("language_code", "vi"),
+        )
+        return {"reply": reply, "messages": [AIMessage(content=reply)]}
+
     reply = generate_reply(
         "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
         "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
