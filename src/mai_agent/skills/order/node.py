@@ -98,8 +98,11 @@ def decline_offer() -> str:
 
 
 class OrderRequestItem(BaseModel):
-    product_reference: str = Field(
-        description="Tên hoặc mã SKU của đúng một sản phẩm",
+    product_reference: str | None = Field(
+        default=None,
+        description=(
+            "Tên hoặc mã SKU của đúng một sản phẩm; null nếu khách không nhắc lại sản phẩm"
+        ),
     )
     quantity: int | None = Field(
         default=None,
@@ -157,6 +160,33 @@ def _validated_quantity(text: str, item: dict[str, Any]) -> int | None:
         return None
     evidence = str(item.get("quantity_evidence", ""))
     return quantity if _has_quantity_evidence(text, evidence) else None
+
+
+def _contextual_product_reference(
+    product_reference: str | None,
+    offered_candidates: list[dict[str, str]],
+) -> str | None:
+    """Resolve an omitted reference only when the prior turn identified one SKU."""
+    if product_reference or len(offered_candidates) != 1:
+        return product_reference
+    return offered_candidates[0].get("product_id")
+
+
+def _contextualize_requested_items(
+    requested_items: list[dict[str, Any]],
+    offered_candidates: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Apply unambiguous prior-turn context before single/multi-item routing."""
+    return [
+        {
+            **item,
+            "product_reference": _contextual_product_reference(
+                item.get("product_reference"),
+                offered_candidates,
+            ),
+        }
+        for item in requested_items
+    ]
 
 
 @tool
@@ -413,7 +443,10 @@ def _interpret_order_request(
                     "nằm trong SKU như OA002 không phải số lượng. Chuyển số lượng viết "
                     "bằng chữ thành số. Nếu khách nói "
                     "'loại 1', 'loại 2'..., ánh xạ theo đúng thứ tự danh sách đã giới "
-                    "thiệu và trả mã SKU tương ứng. Không tự trả lời khách."
+                    "thiệu và trả mã SKU tương ứng. Nếu khách chỉ nêu ý định mua, số lượng "
+                    "hoặc đơn vị như 'mua 2 lọ' mà không nhắc tên, mã hay 'loại này', đặt "
+                    "product_reference=null để hệ thống nối với ngữ cảnh lượt trước. "
+                    "Không tự trả lời khách. "
                     "- “loại này”, “sản phẩm này” là sản phẩm vừa được tư vấn gần nhất. "
                     "Ví dụ 'I want to buy "
                     "OA Purifying Gel' phải có quantity=null; 'I want to buy two OA "
@@ -1338,7 +1371,10 @@ def order_node(state: AgentState) -> dict[str, Any]:
     pending_candidates = session.get("pending_product_candidates", [])
     offered_candidates = pending_candidates or session.get("last_product_candidates", [])
     parsed = _interpret_order_request(text, offered_candidates)
-    requested_items = parsed["items"]
+    requested_items = _contextualize_requested_items(
+        parsed["items"],
+        offered_candidates,
+    )
     shipping_address, shipping_phone = _resolve_shipping_slots(
         parsed,
         session,

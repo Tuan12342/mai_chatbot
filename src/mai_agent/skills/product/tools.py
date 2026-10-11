@@ -70,6 +70,8 @@ def check_product_stock(
         return {
             "status": "partial_stock",
             "available": False,
+            "product_id": product["id"],
+            "product_name": product["name"],
             "reason": "Không đủ số lượng yêu cầu.",
             "requested_quantity": quantity,
             "current_stock": product["stock"],
@@ -79,6 +81,8 @@ def check_product_stock(
     return {
         "status": "out_of_stock",
         "available": False,
+        "product_id": product["id"],
+        "product_name": product["name"],
         "reason": "Sản phẩm đã hết hàng.",
         "requested_quantity": quantity,
         "current_stock": 0,

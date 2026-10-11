@@ -1,11 +1,94 @@
+import json
+import re
 from typing import Any
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from mai_agent.llm import create_chat_model
 from mai_agent.prompts import SYSTEM_PROMPT
 from mai_agent.skills.product.tools import PRODUCT_TOOLS
 from mai_agent.state import AgentState
+
+
+def _tool_payload(message: ToolMessage) -> Any:
+    """Decode the value serialized by LangGraph's ToolNode."""
+    content = message.content
+    if not isinstance(content, str):
+        return content
+    try:
+        return json.loads(content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+
+def _recent_product_candidates(
+    messages: list[Any],
+    response_text: str | None = None,
+) -> list[dict[str, str]]:
+    """Collect products resolved and actually surfaced in this consultation turn."""
+    latest_human_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, HumanMessage):
+            latest_human_index = index
+
+    candidates: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+
+    def add_candidate(product_id: Any, product_name: Any) -> None:
+        if not isinstance(product_id, str) or not isinstance(product_name, str):
+            return
+        normalized_id = product_id.strip().upper()
+        normalized_name = product_name.strip()
+        if not normalized_id or not normalized_name or normalized_id in seen_ids:
+            return
+        seen_ids.add(normalized_id)
+        candidates.append(
+            {"product_id": normalized_id, "product_name": normalized_name},
+        )
+
+    for message in messages[latest_human_index + 1 :]:
+        if not isinstance(message, ToolMessage):
+            continue
+        payload = _tool_payload(message)
+        if message.name == "search_products" and isinstance(payload, list):
+            for product in payload:
+                if isinstance(product, dict):
+                    add_candidate(product.get("id"), product.get("name"))
+        elif message.name == "search_product_knowledge" and isinstance(payload, dict):
+            for product in payload.get("resolved_products", []):
+                if isinstance(product, dict):
+                    add_candidate(product.get("id"), product.get("name"))
+        elif message.name == "check_product_stock" and isinstance(payload, dict):
+            add_candidate(payload.get("product_id"), payload.get("product_name"))
+
+            for alternative in payload.get("alternatives", []):
+                if isinstance(alternative, dict):
+                    add_candidate(alternative.get("id"), alternative.get("name"))
+
+    if response_text is None or len(candidates) <= 1:
+        return candidates
+
+    # Tool searches may return a broad internal result set. Prefer SKUs explicitly
+    # surfaced in the final answer so follow-up purchases do not become falsely
+    # ambiguous. Product names are a fallback for responses that omit the SKU.
+    mentioned_by_id = [
+        candidate
+        for candidate in candidates
+        if re.search(
+            rf"(?<!\w){re.escape(candidate['product_id'])}(?!\w)",
+            response_text,
+            flags=re.IGNORECASE,
+        )
+    ]
+    if mentioned_by_id:
+        return mentioned_by_id
+
+    normalized_response = response_text.casefold()
+    return [
+        candidate
+        for candidate in candidates
+        if candidate["product_name"].casefold() in normalized_response
+    ]
 
 
 def assistant_node(state: AgentState) -> dict[str, Any]:
@@ -44,12 +127,21 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             "  Khi thiếu hàng, truyền loại da và thành phần cần loại trừ từ hồ sơ trên "
             "để nhận gợi ý thay thế.\n"
             f"{profile_context}\n"
+            "- Khi giới thiệu, mô tả hoặc đề xuất sản phẩm trong câu trả lời cuối, luôn "
+            "ghi kèm mã SKU lấy từ kết quả công cụ để duy trì đúng ngữ cảnh hội thoại.\n"
             "- Chỉ trả lời thông tin sản phẩm từ kết quả công cụ; không tự suy đoán."
         )
     )
-    response = model_with_tools.invoke([system_message, *state.get("messages", [])])
+    messages = state.get("messages", [])
+    response = model_with_tools.invoke([system_message, *messages])
 
     # Lượt yêu cầu tool thường chưa có nội dung trả lời. Giữ nguyên AIMessage
     # để tools_condition đọc được response.tool_calls.
     reply = response.text
-    return {"reply": reply, "messages": [response]}
+    update: dict[str, Any] = {"reply": reply, "messages": [response]}
+    # Persist context after tool use so the next turn can resolve a phrase such as
+    # "mua 2 lo" to the single product that was just discussed.
+    if not response.tool_calls:
+        candidates = _recent_product_candidates(messages, reply)
+        update["session"] = {"last_product_candidates": candidates}
+    return update
