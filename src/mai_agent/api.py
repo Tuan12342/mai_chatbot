@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from langchain_core.messages import AIMessage, HumanMessage
-from langfuse.langchain import CallbackHandler
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 
@@ -20,6 +19,7 @@ from mai_agent.chat_sessions import (
     touch_chat_session,
 )
 from mai_agent.graph import create_agent_graph
+from mai_agent.observability import create_langfuse_handler
 from mai_agent.payment import build_vietqr_payment
 
 LOGGER = logging.getLogger(__name__)
@@ -70,13 +70,12 @@ class ChatSession(BaseModel):
 
 
 def _graph_config(session_id: str) -> dict[str, Any]:
-    return {
-        "configurable": {
-            "thread_id": session_id,
-        },
-        "callbacks": [
-            CallbackHandler(),
-        ],
+    return {"configurable": {"thread_id": session_id}}
+
+
+def _traced_graph_config(session_id: str) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        **_graph_config(session_id),
         "run_name": "mai-chat-turn",
         "metadata": {
             "langfuse_user_id": USER_ID,
@@ -84,6 +83,9 @@ def _graph_config(session_id: str) -> dict[str, Any]:
             "langfuse_tags": ["mai-agent", "web"],
         },
     }
+    if handler := create_langfuse_handler():
+        config["callbacks"] = [handler]
+    return config
 
 
 def _invoke_graph(message: str, session_id: str) -> dict[str, Any]:
@@ -93,7 +95,7 @@ def _invoke_graph(message: str, session_id: str) -> dict[str, Any]:
                 "user_id": USER_ID,
                 "messages": [HumanMessage(content=message)],
             },
-            config=_graph_config(session_id),
+            config=_traced_graph_config(session_id),
         )
 
 
@@ -115,13 +117,16 @@ def _read_history(session_id: str) -> list[ChatMessage]:
     return history
 
 
-def _read_payment(session_id: str) -> dict[str, Any] | None:
-    with GRAPH_LOCK:
-        snapshot = graph.get_state(_graph_config(session_id))
-    order = (snapshot.values or {}).get("active_order", {})
+def _payment_for_order(order: dict[str, Any]) -> dict[str, Any] | None:
     if order.get("status") != "confirmed" or order.get("payment_status") != "pending":
         return None
     return build_vietqr_payment(order)
+
+
+def _read_payment(session_id: str) -> dict[str, Any] | None:
+    with GRAPH_LOCK:
+        snapshot = graph.get_state(_graph_config(session_id))
+    return _payment_for_order((snapshot.values or {}).get("active_order", {}))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -179,18 +184,12 @@ def chat(payload: ChatRequest) -> ChatResponse:
     session = result.get("session", {})
     handoff = result.get("handoff", {})
     active_order = result.get("active_order", {})
-    payment_info = None
-    if (
-        active_order.get("status") == "confirmed"
-        and active_order.get("payment_status") == "pending"
-    ):
-        payment_info = build_vietqr_payment(active_order)
     return ChatResponse(
         reply=result.get("reply", ""),
         current_step=session.get("current_step", "idle"),
         cart=session.get("cart", []),
         handoff_status=handoff.get("status", "inactive"),
-        payment=payment_info,
+        payment=_payment_for_order(active_order),
     )
 
 

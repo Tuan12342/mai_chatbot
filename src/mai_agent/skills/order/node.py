@@ -425,6 +425,7 @@ def _interpret_binary_choice(text: str, pending_offer: str) -> bool:
 def _interpret_order_request(
     text: str,
     offered_candidates: list[dict[str, str]] | None = None,
+    pending_order_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Để Gemini trích sản phẩm và số lượng thay cho luật từ khóa."""
     call = invoke_tool(
@@ -446,6 +447,11 @@ def _interpret_order_request(
                     "thiệu và trả mã SKU tương ứng. Nếu khách chỉ nêu ý định mua, số lượng "
                     "hoặc đơn vị như 'mua 2 lọ' mà không nhắc tên, mã hay 'loại này', đặt "
                     "product_reference=null để hệ thống nối với ngữ cảnh lượt trước. "
+                    "Nếu có danh sách sản phẩm đang chờ số lượng, hãy áp dụng câu trả "
+                    "lời mới vào danh sách đó và trả lại đầy đủ từng sản phẩm. Khi khách "
+                    "nói một số lượng áp dụng cho tất cả như 'mỗi loại 2', tạo một item "
+                    "riêng cho từng sản phẩm đang chờ với cùng số lượng và cùng bằng "
+                    "chứng nguyên văn. Giữ quantity=null cho sản phẩm vẫn chưa có số lượng. "
                     "Không tự trả lời khách. "
                     "- “loại này”, “sản phẩm này” là sản phẩm vừa được tư vấn gần nhất. "
                     "Ví dụ 'I want to buy "
@@ -460,6 +466,7 @@ def _interpret_order_request(
             HumanMessage(
                 content=(
                     f"Danh sách đã giới thiệu theo thứ tự: {offered_candidates or []}\n"
+                    f"Sản phẩm đang chờ số lượng: {pending_order_items or []}\n"
                     f"Tin nhắn khách: {text}"
                 )
             ),
@@ -526,6 +533,8 @@ def _process_multi_item_order(
     state: AgentState,
     requested_items: list[dict[str, Any]],
     cart: list[dict[str, Any]],
+    shipping_address: str | None,
+    shipping_phone: str | None,
 ) -> dict[str, Any]:
     """Phân giải và kiểm tra độc lập mọi sản phẩm trong một yêu cầu nhiều dòng."""
     resolved_quantities: dict[str, int] = {}
@@ -560,8 +569,11 @@ def _process_multi_item_order(
             + "\n".join(f"- {error}" for error in resolution_errors)
             + "\nHỏi khách cung cấp lại mã SKU và số lượng cho từng sản phẩm.",
             {
-                "current_step": "selecting_product",
+                "current_step": "collecting_multi_quantities",
                 "cart": cart,
+                "pending_order_items": requested_items,
+                "pending_shipping_address": shipping_address,
+                "pending_phone": shipping_phone,
             },
         )
 
@@ -593,18 +605,17 @@ def _process_multi_item_order(
             {
                 "current_step": "selecting_product",
                 "cart": cart,
+                "pending_order_items": requested_items,
+                "pending_shipping_address": shipping_address,
+                "pending_phone": shipping_phone,
             },
         )
 
     updated_cart = [*cart, *checked_items]
-    return _reply(
-        f"Đã kiểm tra và thêm riêng từng sản phẩm vào giỏ: {checked_items}. "
-        "Hỏi khách cung cấp địa chỉ giao hàng và số điện thoại người nhận.",
-        {
-            "current_step": "collecting_address",
-            "cart": updated_cart,
-            "pending_product_candidates": [],
-        },
+    return _reply_after_cart_ready(
+        updated_cart,
+        shipping_address,
+        shipping_phone,
     )
 
 
@@ -691,6 +702,7 @@ def _clean_cancelled_order_session() -> dict[str, Any]:
         "pending_product_candidates": [],
         "last_product_candidates": [],
         "pending_quantity": None,
+        "pending_order_items": [],
         "pending_shipping_address": None,
         "pending_phone": None,
         "pending_available_quantity": None,
@@ -1370,17 +1382,46 @@ def order_node(state: AgentState) -> dict[str, Any]:
 
     pending_candidates = session.get("pending_product_candidates", [])
     offered_candidates = pending_candidates or session.get("last_product_candidates", [])
-    parsed = _interpret_order_request(text, offered_candidates)
+    pending_order_items = session.get("pending_order_items", [])
+    parsed = _interpret_order_request(
+        text,
+        offered_candidates,
+        pending_order_items,
+    )
     requested_items = _contextualize_requested_items(
         parsed["items"],
         offered_candidates,
     )
+    if pending_order_items:
+        parsed_by_reference = {
+            str(item.get("product_reference", "")).casefold(): item
+            for item in requested_items
+            if item.get("product_reference")
+        }
+        merged_items = []
+        pending_references = set()
+        for pending_item in pending_order_items:
+            reference = str(pending_item.get("product_reference", ""))
+            pending_references.add(reference.casefold())
+            merged_items.append(parsed_by_reference.get(reference.casefold(), pending_item))
+        merged_items.extend(
+            item
+            for item in requested_items
+            if str(item.get("product_reference", "")).casefold() not in pending_references
+        )
+        requested_items = merged_items
     shipping_address, shipping_phone = _resolve_shipping_slots(
         parsed,
         session,
     )
     if len(requested_items) > 1:
-        return _process_multi_item_order(state, requested_items, cart)
+        return _process_multi_item_order(
+            state,
+            requested_items,
+            cart,
+            shipping_address,
+            shipping_phone,
+        )
 
     first_item = requested_items[0] if requested_items else {}
     product_reference = first_item.get("product_reference")
@@ -1435,7 +1476,11 @@ def order_node(state: AgentState) -> dict[str, Any]:
             },
         )
 
-    if current_step == "collecting_quantity" and session.get("pending_product_reference"):
+    if (
+        current_step == "collecting_quantity"
+        and not product_reference
+        and session.get("pending_product_reference")
+    ):
         product_reference = session["pending_product_reference"]
     if pending_candidates:
         product_reference = interpreted_reference
@@ -1625,6 +1670,7 @@ def _reply_after_cart_ready(
             {
                 "current_step": "confirming_order",
                 "cart": cart,
+                "pending_order_items": [],
                 "pending_shipping_address": address,
                 "pending_phone": phone,
             },
@@ -1644,6 +1690,7 @@ def _reply_after_cart_ready(
         {
             "current_step": "collecting_address",
             "cart": cart,
+            "pending_order_items": [],
             "pending_shipping_address": address,
             "pending_phone": phone,
         },

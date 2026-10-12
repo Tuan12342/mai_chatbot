@@ -212,6 +212,14 @@ def _interpret_intent(
     return tool_to_intent[tool_name]
 
 
+def _pending_context(session: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in session.items()
+        if key.startswith("pending_") and value not in (None, "", [])
+    }
+
+
 def classify_intent_node(state: AgentState) -> dict[str, Any]:
     text = latest_user_text(state)
     session = state.get("session", {})
@@ -221,12 +229,7 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
     if _is_out_of_scope(text, current_step):
         intent: Intent = "unknown"
     else:
-        pending_context = {
-            key: value
-            for key, value in session.items()
-            if key.startswith("pending_") and value not in (None, "", [])
-        }
-        intent = _interpret_intent(text, current_step, pending_context)
+        intent = _interpret_intent(text, current_step, _pending_context(session))
     session_update: SessionState = {
         "session_id": session.get("session_id", state.get("user_id", "anonymous")),
         "language_code": session.get("language_code", "vi"),
@@ -245,11 +248,7 @@ def fallback_node(state: AgentState) -> dict[str, Any]:
     session = state.get("session", {})
     current_step = session.get("current_step", "idle")
     if current_step != "idle":
-        pending_context = {
-            key: value
-            for key, value in session.items()
-            if key.startswith("pending_") and value not in (None, "", [])
-        }
+        pending_context = _pending_context(session)
         reply = generate_reply(
             "Chưa xác định được khách muốn tiếp tục đơn hay chuyển sang yêu cầu khác. "
             "Không tự suy diễn, không thay đổi giỏ và không xóa dữ liệu đã thu thập. "

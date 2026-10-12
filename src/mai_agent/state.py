@@ -20,6 +20,7 @@ ConversationStep = Literal[
     "idle",
     "selecting_product",
     "collecting_quantity",
+    "collecting_multi_quantities",
     "confirming_alternative",
     "confirming_partial_quantity",
     "collecting_address",
@@ -65,6 +66,11 @@ class ProductCandidate(TypedDict):
     product_name: str
 
 
+class PendingOrderItem(TypedDict):
+    product_reference: str | None
+    quantity: int | None
+
+
 class Address(TypedDict, total=False):
     address_id: Required[str]
     address_line: Required[str]
@@ -87,6 +93,7 @@ class SessionState(TypedDict, total=False):
     pending_product_candidates: list[ProductCandidate]
     last_product_candidates: list[ProductCandidate]
     pending_quantity: int | None
+    pending_order_items: list[PendingOrderItem]
     pending_cart_revision: list[CartItem]
     pending_revised_shipping_address: str | None
     pending_revised_phone: str | None
