@@ -3,6 +3,7 @@ from typing import Any, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
+from underthesea import lang_detect
 
 from mai_agent.customer_store import find_customer_by_zalo_id
 from mai_agent.llm import invoke_tool
@@ -18,29 +19,8 @@ def latest_user_text(state: AgentState) -> str:
     return ""
 
 
-@tool
-def use_vietnamese() -> str:
-    """Tin nhắn chủ yếu bằng tiếng Việt."""
-    return "vi"
-
-
-@tool
-def use_english() -> str:
-    """Tin nhắn chủ yếu bằng tiếng Anh."""
-    return "en"
-
-
-@tool
-def keep_current_language() -> str:
-    """Tin nhắn không đủ ngôn ngữ để xác định, giữ ngôn ngữ hiện tại."""
-    return "keep"
-
-
-LANGUAGE_TOOLS = [use_vietnamese, use_english, keep_current_language]
-
-
 def detect_language_node(state: AgentState) -> dict[str, Any]:
-    """Phát hiện ngôn ngữ lượt hiện tại mà không làm mất state nghiệp vụ."""
+    """Phát hiện ngôn ngữ cục bộ bằng underthesea, không gọi LLM."""
     session = state.get("session", {})
     customer = state.get("customer", {})
     current_language = session.get("language_code")
@@ -48,39 +28,17 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
         preferred_language = customer.get("preferred_language")
         current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
 
-    call = invoke_tool(
-        LANGUAGE_TOOLS,
-        [
-            SystemMessage(
-                content=(
-                    "Xác định ngôn ngữ mà trợ lý phải dùng cho lượt trả lời tiếp theo "
-                    "và bắt buộc gọi đúng một tool. Gọi use_vietnamese khi tin nhắn "
-                    "thể hiện rõ tiếng Việt; gọi use_english khi thể hiện rõ tiếng Anh. "
-                    "Gọi keep_current_language với nội dung trung tính hoặc không đủ "
-                    "bằng chứng như SKU, tên sản phẩm, tên INCI, con số, số lượng, số "
-                    "điện thoại, địa chỉ ngắn, emoji, hoặc câu xác nhận rất ngắn. Việc "
-                    "đổi ngôn ngữ không được hiểu là bắt đầu phiên mới. Không trả lời khách."
-                )
-            ),
-            HumanMessage(
-                content=(
-                    f"Ngôn ngữ hiện tại: {current_language}\n"
-                    f"Tin nhắn mới: {latest_user_text(state)}"
-                )
-            ),
-        ],
-        error_message="Gemini không trả kết quả nhận diện ngôn ngữ.",
-    )
+    text = latest_user_text(state).strip()
+    letters = [character for character in text if character.isalpha()]
+    is_product_code = any(character.isdigit() for character in text) and len(letters) <= 5
+    if not text or len(letters) <= 2 or is_product_code:
+        return {"session": {"language_code": current_language}}
 
-    tool_name = call["name"]
-    language_by_tool: dict[str, LanguageCode] = {
-        "use_vietnamese": "vi",
-        "use_english": "en",
-        "keep_current_language": current_language,
-    }
-    if tool_name not in language_by_tool:
-        raise RuntimeError(f"Gemini gọi language tool không được hỗ trợ: {tool_name}")
-    return {"session": {"language_code": language_by_tool[tool_name]}}
+    detected_language = lang_detect(text)
+    language: LanguageCode = (
+        detected_language if detected_language in {"vi", "en"} else current_language
+    )
+    return {"session": {"language_code": language}}
 
 
 @tool

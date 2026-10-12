@@ -715,7 +715,7 @@ def _clean_cancelled_order_session() -> dict[str, Any]:
 def _is_valid_shipping_address(address: str) -> bool:
     """Địa chỉ phải có nội dung chữ, không được chỉ là số điện thoại/con số."""
     letters = [character for character in address if character.isalpha()]
-    return len(letters) >= 3
+    return len(letters) >= 11
 
 
 def _normalize_phone(phone: str) -> str | None:
