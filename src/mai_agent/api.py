@@ -18,12 +18,13 @@ from mai_agent.chat_sessions import (
     list_chat_sessions,
     touch_chat_session,
 )
+from mai_agent.customer_store import find_customer_by_zalo_id, load_customers
 from mai_agent.graph import create_agent_graph
 from mai_agent.observability import create_langfuse_handler
+from mai_agent.order_store import save_order
 from mai_agent.payment import build_vietqr_payment
 
 LOGGER = logging.getLogger(__name__)
-USER_ID = "local-user"
 GRAPH_LOCK = Lock()
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,6 +37,7 @@ app = FastAPI(title="Mai — OA Cosmetics", version="0.1.0")
 
 class ChatRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=100)
+    user_id: str = Field(min_length=1, max_length=100)
     message: str = Field(min_length=1, max_length=4000)
 
 
@@ -64,21 +66,36 @@ class ChatResponse(BaseModel):
 
 class ChatSession(BaseModel):
     session_id: str
+    user_id: str
     title: str
     created_at: str
     updated_at: str
+
+
+class TestUser(BaseModel):
+    user_id: str
+    name: str
+
+
+class CreateSessionRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=100)
+
+
+def _require_test_user(user_id: str) -> None:
+    if find_customer_by_zalo_id(user_id) is None:
+        raise HTTPException(status_code=400, detail="User ID kiểm thử không hợp lệ.")
 
 
 def _graph_config(session_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": session_id}}
 
 
-def _traced_graph_config(session_id: str) -> dict[str, Any]:
+def _traced_graph_config(session_id: str, user_id: str) -> dict[str, Any]:
     config: dict[str, Any] = {
         **_graph_config(session_id),
         "run_name": "mai-chat-turn",
         "metadata": {
-            "langfuse_user_id": USER_ID,
+            "langfuse_user_id": user_id,
             "langfuse_session_id": session_id,
             "langfuse_tags": ["mai-agent", "web"],
         },
@@ -88,14 +105,14 @@ def _traced_graph_config(session_id: str) -> dict[str, Any]:
     return config
 
 
-def _invoke_graph(message: str, session_id: str) -> dict[str, Any]:
+def _invoke_graph(message: str, session_id: str, user_id: str) -> dict[str, Any]:
     with GRAPH_LOCK:
         return graph.invoke(
             {
-                "user_id": USER_ID,
+                "user_id": user_id,
                 "messages": [HumanMessage(content=message)],
             },
-            config=_traced_graph_config(session_id),
+            config=_traced_graph_config(session_id, user_id),
         )
 
 
@@ -140,40 +157,57 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/test-users", response_model=list[TestUser])
+def test_users() -> list[dict[str, str]]:
+    """Danh tính giả lập cho giao diện kiểm thử; không dùng làm auth production."""
+    return [
+        {"user_id": customer["zalo_user_id"], "name": customer.get("name", "Khách")}
+        for customer in load_customers()
+    ]
+
+
 @app.get("/api/history", response_model=list[ChatMessage])
-def history(session_id: str) -> list[ChatMessage]:
-    if get_chat_session(session_id) is None:
+def history(session_id: str, user_id: str) -> list[ChatMessage]:
+    _require_test_user(user_id)
+    if get_chat_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
     return _read_history(session_id)
 
 
 @app.get("/api/payment", response_model=PaymentResponse | None)
-def payment(session_id: str) -> dict[str, Any] | None:
-    if get_chat_session(session_id) is None:
+def payment(session_id: str, user_id: str) -> dict[str, Any] | None:
+    _require_test_user(user_id)
+    if get_chat_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
     return _read_payment(session_id)
 
 
 @app.get("/api/sessions", response_model=list[ChatSession])
-def sessions() -> list[dict[str, Any]]:
-    return list_chat_sessions()
+def sessions(user_id: str) -> list[dict[str, Any]]:
+    _require_test_user(user_id)
+    return list_chat_sessions(user_id)
 
 
 @app.post("/api/sessions", response_model=ChatSession, status_code=201)
-def create_session() -> dict[str, Any]:
-    return create_chat_session()
+def create_session(payload: CreateSessionRequest) -> dict[str, Any]:
+    _require_test_user(payload.user_id)
+    return create_chat_session(payload.user_id)
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest) -> ChatResponse:
+    _require_test_user(payload.user_id)
     message = payload.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Tin nhắn không được để trống.")
-    if get_chat_session(payload.session_id) is None:
+    if get_chat_session(payload.session_id, payload.user_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
     try:
-        result = _invoke_graph(message, payload.session_id)
-        touch_chat_session(payload.session_id, message)
+        result = _invoke_graph(message, payload.session_id, payload.user_id)
+        active_order = result.get("active_order", {})
+        if active_order.get("status") == "confirmed":
+            save_order(active_order)
+        touch_chat_session(payload.session_id, payload.user_id, message)
     except Exception as error:
         LOGGER.exception("Không thể xử lý tin nhắn", exc_info=error)
         raise HTTPException(

@@ -20,7 +20,7 @@ def latest_user_text(state: AgentState) -> str:
 
 
 def detect_language_node(state: AgentState) -> dict[str, Any]:
-    """Phát hiện ngôn ngữ cục bộ bằng underthesea, không gọi LLM."""
+    
     session = state.get("session", {})
     customer = state.get("customer", {})
     current_language = session.get("language_code")
@@ -40,11 +40,16 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
     )
     return {"session": {"language_code": language}}
 
-
 @tool
 def route_order() -> str:
     """Khách muốn mua, đặt, sửa hoặc xác nhận một đơn hàng mới."""
     return "order"
+
+
+@tool
+def route_order_lookup() -> str:
+    """Khách muốn tra cứu trạng thái hoặc thông tin của một đơn hàng đã tạo trước đó."""
+    return "order_lookup"
 
 
 @tool
@@ -79,6 +84,7 @@ def route_out_of_scope() -> str:
 
 ROUTING_TOOLS = [
     route_order,
+    route_order_lookup,
     route_recommendation,
     route_product_question,
     route_unknown,
@@ -135,8 +141,11 @@ def _interpret_intent(
                     "Phân loại ý định chính và bắt buộc gọi đúng một routing tool; "
                     "không tự trả lời khách. Ưu tiên route_order nếu khách yêu cầu "
                     "lấy, mua hoặc chốt số lượng cụ thể, kể cả khi dùng 'loại này', "
-                    "'sản phẩm này', 'loại 1', 'loại 2' hoặc kèm mã SKU. Ví dụ, "
-                    "'lấy 5 chai loại này và 10 OA003' bắt buộc là route_order. "
+                    "'sản phẩm này', 'loại 1', 'loại 2' hoặc kèm mã SKU. "
+                    "Chọn route_order_lookup khi khách muốn tra trạng thái, thanh toán, "
+                    "giao hàng hoặc thông tin của đơn đã tạo trước đó. Nếu bước hiện "
+                    "tại là verifying_order_lookup và khách đang cung cấp mã đơn hoặc "
+                    "số điện thoại xác thực thì bắt buộc chọn route_order_lookup. "
                     "Nếu khách chỉ hỏi thông tin thì chọn route_product_question. "
                     "Nếu khách cần lựa chọn sản phẩm theo da hoặc cung cấp thêm đặc "
                     "điểm da để tiếp tục tư vấn thì chọn route_recommendation. "
@@ -160,6 +169,7 @@ def _interpret_intent(
     )
     tool_to_intent: dict[str, Intent] = {
         "route_order": "order",
+        "route_order_lookup": "order_lookup",
         "route_recommendation": "recommendation",
         "route_product_question": "product_question",
         "route_unknown": "unknown",
@@ -219,8 +229,7 @@ def fallback_node(state: AgentState) -> dict[str, Any]:
     reply = generate_reply(
         "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
         "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
-        "tư vấn chăm sóc da và đặt đơn mới. Với yêu cầu tra đơn cũ, "
-        "hướng dẫn khách liên hệ nhân viên shop. Không trả "
+        "tư vấn chăm sóc da, đặt đơn mới và tra đơn có xác thực. Không trả "
         "lời nội dung ngoài phạm vi. Mời khách đặt câu hỏi liên quan "
         "đến sản phẩm hoặc nhu cầu chăm sóc da.",
         response_language=state.get("session", {}).get("language_code", "vi"),

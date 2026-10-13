@@ -595,13 +595,27 @@ def _process_multi_item_order(
                 f"{product_id}: yêu cầu {quantity}, hiện chỉ còn {stock['current_stock']}."
             )
         else:
-            stock_errors.append(f"{product_id}: hiện đã hết hàng.")
+            alternatives = stock.get("alternatives", [])
+            if alternatives:
+                alternative_summary = ", ".join(
+                    f"{item['id']} - {item['name']}" for item in alternatives
+                )
+                stock_errors.append(
+                    f"{product_id}: hiện đã hết hàng; sản phẩm thay thế phù hợp "
+                    f"hồ sơ da: {alternative_summary}."
+                )
+            else:
+                stock_errors.append(
+                    f"{product_id}: hiện đã hết hàng và chưa có sản phẩm thay thế "
+                    "phù hợp hồ sơ da."
+                )
 
     if stock_errors:
         return _reply(
             "Chưa thêm sản phẩm nào của yêu cầu này vào giỏ vì tồn kho chưa đáp ứng:\n"
             + "\n".join(f"- {error}" for error in stock_errors)
-            + "\nHỏi khách xác nhận lại số lượng cho từng mã; không tự thay thế sản phẩm.",
+            + "\nHỏi khách chọn mã thay thế được gợi ý hoặc xác nhận lại số lượng; "
+            "không tự thay thế sản phẩm.",
             {
                 "current_step": "selecting_product",
                 "cart": cart,
@@ -715,7 +729,7 @@ def _clean_cancelled_order_session() -> dict[str, Any]:
 def _is_valid_shipping_address(address: str) -> bool:
     """Địa chỉ phải có nội dung chữ, không được chỉ là số điện thoại/con số."""
     letters = [character for character in address if character.isalpha()]
-    return len(letters) >= 11
+    return len(letters) >= 1
 
 
 def _normalize_phone(phone: str) -> str | None:

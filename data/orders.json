@@ -13,5 +13,77 @@
         "unit_price": 389000
       }
     ]
+  },
+  {
+    "order_id": "ORDER-002",
+    "customer_id": "zalo-user-002",
+    "status": "processing",
+    "payment_status": "paid",
+    "total_amount": 329000,
+    "items": [
+      {
+        "product_id": "OA006",
+        "product_name": "Kem dưỡng OA Ceramide Cream",
+        "quantity": 1,
+        "unit_price": 329000
+      }
+    ]
+  },
+  {
+    "order_id": "ORDER-003",
+    "customer_id": "zalo-user-003",
+    "status": "confirmed",
+    "payment_status": "pending",
+    "total_amount": 98000,
+    "items": [
+      {
+        "product_id": "OA009",
+        "product_name": "Mặt nạ OA Soothing Mask",
+        "quantity": 2,
+        "unit_price": 49000
+      }
+    ]
+  },
+  {
+    "order_id": "ORDER-004",
+    "customer_id": "zalo-user-004",
+    "status": "completed",
+    "payment_status": "paid",
+    "total_amount": 438000,
+    "items": [
+      {
+        "product_id": "OA002",
+        "product_name": "Gel rửa mặt OA Purifying Gel",
+        "quantity": 2,
+        "unit_price": 219000
+      }
+    ]
+  },
+  {
+    "order_id": "ORDER-005",
+    "customer_id": "zalo-user-005",
+    "status": "processing",
+    "payment_status": "paid",
+    "total_amount": 532000,
+    "items": [
+      {
+        "product_id": "OA003",
+        "product_name": "Toner cấp ẩm OA Hydrating Toner",
+        "quantity": 1,
+        "unit_price": 245000
+      },
+      {
+        "product_id": "OA009",
+        "product_name": "Mặt nạ OA Soothing Mask",
+        "quantity": 2,
+        "unit_price": 49000
+      },
+      {
+        "product_id": "OA001",
+        "product_name": "Sữa rửa mặt dịu nhẹ OA Gentle Cleanser",
+        "quantity": 1,
+        "unit_price": 189000
+      }
+    ]
   }
 ]

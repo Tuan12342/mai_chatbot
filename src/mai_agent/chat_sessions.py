@@ -27,57 +27,78 @@ def _connect() -> sqlite3.Connection:
         )
         """
     )
+    columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(chat_sessions)").fetchall()
+    }
+    if "user_id" not in columns:
+        connection.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN user_id TEXT NOT NULL "
+            "DEFAULT 'zalo-user-001'"
+        )
     return connection
 
 
-def create_chat_session(title: str = DEFAULT_TITLE) -> dict[str, Any]:
+def create_chat_session(user_id: str, title: str = DEFAULT_TITLE) -> dict[str, Any]:
     session_id = str(uuid4())
     timestamp = _now()
     normalized_title = title.strip() or DEFAULT_TITLE
     with _connect() as connection:
         connection.execute(
             """
-            INSERT INTO chat_sessions (session_id, title, created_at, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO chat_sessions (session_id, user_id, title, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (session_id, normalized_title, timestamp, timestamp),
+            (session_id, user_id, normalized_title, timestamp, timestamp),
         )
     return {
         "session_id": session_id,
+        "user_id": user_id,
         "title": normalized_title,
         "created_at": timestamp,
         "updated_at": timestamp,
     }
 
 
-def list_chat_sessions() -> list[dict[str, Any]]:
+def list_chat_sessions(user_id: str) -> list[dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute(
             """
-            SELECT session_id, title, created_at, updated_at
+            SELECT session_id, user_id, title, created_at, updated_at
             FROM chat_sessions
+            WHERE user_id = ?
             ORDER BY updated_at DESC
-            """
+            """,
+            (user_id,),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
-def get_chat_session(session_id: str) -> dict[str, Any] | None:
+def get_chat_session(session_id: str, user_id: str | None = None) -> dict[str, Any] | None:
     with _connect() as connection:
-        row = connection.execute(
-            """
-            SELECT session_id, title, created_at, updated_at
-            FROM chat_sessions
-            WHERE session_id = ?
-            """,
-            (session_id,),
-        ).fetchone()
+        if user_id is None:
+            row = connection.execute(
+                """
+                SELECT session_id, user_id, title, created_at, updated_at
+                FROM chat_sessions
+                WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                """
+                SELECT session_id, user_id, title, created_at, updated_at
+                FROM chat_sessions
+                WHERE session_id = ? AND user_id = ?
+                """,
+                (session_id, user_id),
+            ).fetchone()
     return dict(row) if row else None
 
 
-def touch_chat_session(session_id: str, first_message: str) -> None:
+def touch_chat_session(session_id: str, user_id: str, first_message: str) -> None:
     """Cập nhật thời gian và dùng tin nhắn đầu tiên làm tiêu đề phiên."""
-    session = get_chat_session(session_id)
+    session = get_chat_session(session_id, user_id)
     if session is None:
         raise ValueError(f"Không tìm thấy phiên chat {session_id}.")
 
@@ -91,7 +112,7 @@ def touch_chat_session(session_id: str, first_message: str) -> None:
             """
             UPDATE chat_sessions
             SET title = ?, updated_at = ?
-            WHERE session_id = ?
+            WHERE session_id = ? AND user_id = ?
             """,
-            (title, _now(), session_id),
+            (title, _now(), session_id, user_id),
         )

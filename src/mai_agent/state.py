@@ -13,6 +13,7 @@ Intent = Literal[
     "product_question",
     "recommendation",
     "order",
+    "order_lookup",
     "unknown",
 ]
 
@@ -26,6 +27,7 @@ ConversationStep = Literal[
     "collecting_address",
     "confirming_cart_revision",
     "confirming_order",
+    "verifying_order_lookup",
 ]
 
 OrderStatus = Literal[
@@ -100,6 +102,8 @@ class SessionState(TypedDict, total=False):
     pending_shipping_address: str | None
     pending_phone: str | None
     pending_available_quantity: int | None
+    pending_order_lookup_id: str | None
+    pending_order_lookup_attempts: int
 
 
 class CustomerProfile(TypedDict, total=False):
