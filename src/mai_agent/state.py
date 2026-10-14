@@ -50,6 +50,9 @@ PaymentStatus = Literal[
 ]
 
 HandoffStatus = Literal[
+    "none",
+    "requested",
+    "active",
     "inactive",
     "waiting_for_human",
     "human_active",
@@ -109,6 +112,11 @@ class SessionState(TypedDict, total=False):
     pending_order_lookup_attempts: int
     pending_profile_update: dict[str, Any] | None
     pending_profile_reason: str | None
+    handoff_status: HandoffStatus
+    handoff_reason: str | None
+    handoff_trigger: str | None
+    handoff_package: dict[str, Any]
+    handoff_resolution_summary: str | None
 
 
 class CustomerProfile(TypedDict, total=False):
@@ -163,6 +171,7 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     user_id: str
     reply: str
+    response_owner: Literal["ai", "human"]
     session: Annotated[SessionState, merge_mapping]
 
     # Các bản chụp được nạp từ kho dữ liệu lâu dài khi cần.

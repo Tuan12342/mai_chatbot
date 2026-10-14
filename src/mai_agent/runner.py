@@ -39,6 +39,12 @@ def main() -> None:
 
             if reply := result.get("reply", ""):
                 print(f"Mai: {reply}\n")
+            elif result.get("response_owner") == "human":
+                print("[Hội thoại đang do nhân viên xử lý; bot không tự động trả lời.]\n")
     finally:
         if langfuse:
             langfuse.flush()
+
+
+if __name__ == "__main__":
+    main()

@@ -221,6 +221,7 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
         "current_intent": intent,
         "current_step": current_step,
         "cart": session.get("cart", []),
+        "handoff_status": session.get("handoff_status", "none"),
     }
     update: dict[str, Any] = {"session": session_update}
     customer = find_customer_by_zalo_id(state.get("user_id", ""))

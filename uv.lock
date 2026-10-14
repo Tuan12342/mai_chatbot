@@ -1003,6 +1003,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "underthesea" },
     { name = "uvicorn" },
 ]
@@ -1025,6 +1026,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0,<4.0" },
     { name = "pydantic-settings", specifier = ">=2.10,<3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<9.0" },
+    { name = "python-dotenv", specifier = ">=1.1,<2.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1.0" },
     { name = "underthesea", specifier = ">=9.2.11,<10.0" },
     { name = "uvicorn", specifier = ">=0.34,<1.0" },
