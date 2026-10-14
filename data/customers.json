@@ -6,28 +6,45 @@
     "skin_type": "da dầu",
     "sensitivities": [],
     "allergies": [],
-    "excluded_ingredients": ["Alcohol"],
-    "disliked_product_ids": []
+    "concerns": [],
+    "excluded_ingredients": [
+      "Alcohol"
+    ],
+    "disliked_product_ids": [],
+    "last_updated": "2026-10-14T09:08:19.898011+07:00"
   },
   {
     "zalo_user_id": "zalo-user-002",
     "name": "Minh",
     "phone": "0902345678",
     "skin_type": "da khô",
-    "sensitivities": ["hương liệu"],
+    "sensitivities": [
+      "hương liệu"
+    ],
     "allergies": [],
-    "excluded_ingredients": ["Fragrance"],
-    "disliked_product_ids": []
+    "concerns": [],
+    "excluded_ingredients": [
+      "Fragrance"
+    ],
+    "disliked_product_ids": [],
+    "last_updated": "2025-01-01T00:00:00+07:00"
   },
   {
     "zalo_user_id": "zalo-user-003",
     "name": "Hương",
     "phone": "0903456789",
     "skin_type": "da nhạy cảm",
-    "sensitivities": ["Alcohol"],
+    "sensitivities": [
+      "Alcohol"
+    ],
     "allergies": [],
-    "excluded_ingredients": ["Alcohol", "Fragrance"],
-    "disliked_product_ids": []
+    "concerns": [],
+    "excluded_ingredients": [
+      "Alcohol",
+      "Fragrance"
+    ],
+    "disliked_product_ids": [],
+    "last_updated": "2025-01-01T00:00:00+07:00"
   },
   {
     "zalo_user_id": "zalo-user-004",
@@ -36,17 +53,27 @@
     "skin_type": "da hỗn hợp",
     "sensitivities": [],
     "allergies": [],
+    "concerns": [],
     "excluded_ingredients": [],
-    "disliked_product_ids": ["OA007"]
+    "disliked_product_ids": [
+      "OA007"
+    ],
+    "last_updated": "2025-01-01T00:00:00+07:00"
   },
   {
     "zalo_user_id": "zalo-user-005",
     "name": "Mai Anh",
     "phone": "0905678901",
     "skin_type": "da thường",
-    "sensitivities": ["AHA"],
+    "sensitivities": [
+      "AHA"
+    ],
     "allergies": [],
-    "excluded_ingredients": ["Glycolic Acid"],
-    "disliked_product_ids": []
+    "concerns": [],
+    "excluded_ingredients": [
+      "Glycolic Acid"
+    ],
+    "disliked_product_ids": [],
+    "last_updated": "2025-01-01T00:00:00+07:00"
   }
 ]

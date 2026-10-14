@@ -13,9 +13,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    google_api_key: str
+    llm_provider: str = "google"
+    llm_timeout_seconds: float = 60
+    llm_max_retries: int = 1
+    google_api_key: str = ""
     google_model: str = "gemini-3.5-flash-lite"
-    google_embedding_model: str = "models/gemini-embedding-001"
+    google_embedding_model: str = "models/gemini-embedding-2"
+    misa_api_key: str = ""
+    misa_base_url: str = "https://ai.misa.vn/nlp/llm-gateway/v1"
+    misa_model: str = "misa-ai-1.1-plus"
     vietqr_bank_id: str = ""
     vietqr_account_number: str = ""
     vietqr_account_name: str = ""

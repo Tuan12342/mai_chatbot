@@ -3,11 +3,34 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from mai_agent.catalog import find_alternative_products, find_product, load_products
+from mai_agent.catalog import (
+    extract_product_mentions,
+    find_alternative_products,
+    find_product,
+    load_products,
+    normalize_product_reference,
+    product_alias_candidates,
+)
 from mai_agent.skills.product.vector_store import (
     get_product_vector_store,
     resolve_product_references,
 )
+
+INGREDIENT_ALIASES = {
+    "hương liệu": ("hương liệu", "fragrance", "parfum"),
+    "fragrance": ("hương liệu", "fragrance", "parfum"),
+    "cồn": ("alcohol", "ethanol", "cồn"),
+    "alcohol": ("alcohol", "ethanol", "cồn"),
+}
+
+
+def _avoid_ingredient_terms(*groups: list[str] | None) -> set[str]:
+    terms: set[str] = set()
+    for value in (item for group in groups for item in group or []):
+        normalized = value.strip().casefold()
+        if normalized:
+            terms.update(INGREDIENT_ALIASES.get(normalized, (normalized,)))
+    return terms
 
 
 @tool
@@ -16,14 +39,17 @@ def search_products(keyword: str) -> list[dict[str, Any]]:
 
     Dùng tool này khi khách hỏi về thành phần, công dụng,
     cách dùng, loại da phù hợp, giá hoặc thông tin sản phẩm."""
-    normalized_keyword = keyword.strip().lower()
+    normalized_keyword = normalize_product_reference(keyword)
     if not normalized_keyword:
         return []
 
+    alias_ids = set(product_alias_candidates(keyword))
     matches = []
     for product in load_products():
-        searchable_text = " ".join([product["id"], product["name"], product["category"]]).lower()
-        if normalized_keyword in searchable_text:
+        searchable_text = normalize_product_reference(
+            " ".join([product["id"], product["name"], product["category"]])
+        )
+        if product["id"] in alias_ids or normalized_keyword in searchable_text:
             matches.append(
                 {
                     "id": product["id"],
@@ -46,6 +72,9 @@ def check_product_stock(
     quantity: int,
     skin_type: str | None = None,
     excluded_ingredients: list[str] | None = None,
+    sensitivities: list[str] | None = None,
+    allergies: list[str] | None = None,
+    disliked_product_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Kiểm tra sản phẩm có tồn tại và còn đủ số lượng để bán hay không."""
 
@@ -89,9 +118,73 @@ def check_product_stock(
         "alternatives": find_alternative_products(
             product_id,
             skin_type=skin_type,
-            excluded_ingredients=excluded_ingredients,
+            excluded_ingredients=list(
+                _avoid_ingredient_terms(excluded_ingredients, sensitivities, allergies)
+            ),
+            disliked_product_ids=disliked_product_ids,
         ),
     }
+
+
+@tool
+def recommend_products(
+    skin_type: str | None = None,
+    concerns: list[str] | None = None,
+    excluded_ingredients: list[str] | None = None,
+    sensitivities: list[str] | None = None,
+    allergies: list[str] | None = None,
+    disliked_product_ids: list[str] | None = None,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Gợi ý sản phẩm còn hàng theo hồ sơ da và loại bỏ sản phẩm khách không thích."""
+    normalized_skin_type = (skin_type or "").strip().casefold()
+    excluded = _avoid_ingredient_terms(excluded_ingredients, sensitivities, allergies)
+    disliked = {product_id.strip().upper() for product_id in disliked_product_ids or []}
+    concern_terms = {
+        "mụn": ("salicylic", "zinc", "lỗ chân lông", "dầu thừa"),
+        "thâm": ("niacinamide", "arbutin", "đều màu", "vết thâm"),
+        "nám": ("niacinamide", "arbutin", "đều màu", "chống nắng", "uva", "uvb"),
+        "lão hóa": ("chống nắng", "uva", "uvb", "cấp ẩm", "hyaluronic"),
+        "khô": ("cấp ẩm", "khóa ẩm", "ceramide", "hyaluronic", "squalane"),
+    }
+    requested_concerns = [str(concern).strip().casefold() for concern in concerns or []]
+    ranked_matches: list[tuple[int, dict[str, Any]]] = []
+    for product in load_products():
+        supported = {item.casefold() for item in product["skin_types"]}
+        ingredients = {item.casefold() for item in product["ingredients"]}
+        if product["stock"] <= 0 or product["id"].upper() in disliked:
+            continue
+        if (
+            normalized_skin_type
+            and normalized_skin_type not in supported
+            and "mọi loại da" not in supported
+        ):
+            continue
+        if any(blocked in ingredient for blocked in excluded for ingredient in ingredients):
+            continue
+        searchable = " ".join([*product["ingredients"], *product["benefits"]]).casefold()
+        score = sum(
+            term in searchable
+            for concern in requested_concerns
+            for term in concern_terms.get(concern, (concern,))
+        )
+        ranked_matches.append(
+            (
+                score,
+                {
+                    "id": product["id"],
+                    "name": product["name"],
+                    "category": product["category"],
+                    "skin_types": product["skin_types"],
+                    "ingredients": product["ingredients"],
+                    "benefits": product["benefits"],
+                    "price_vnd": product["price_vnd"],
+                    "stock": product["stock"],
+                },
+            )
+        )
+    ranked_matches.sort(key=lambda item: (-item[0], -item[1]["stock"]))
+    return [product for _, product in ranked_matches[: max(1, min(limit, 10))]]
 
 
 @tool
@@ -108,6 +201,8 @@ def search_product_knowledge(
     references = list(product_references or [])
     if not references:
         references = re.findall(r"\bOA\d+\b", query, flags=re.IGNORECASE)
+    if not references:
+        references = extract_product_mentions(query)
 
     resolution = resolve_product_references(references)
     resolved_products = resolution["resolved"]
@@ -141,6 +236,7 @@ def search_product_knowledge(
 
 PRODUCT_TOOLS = [
     search_products,
+    recommend_products,
     search_product_knowledge,
     check_product_stock,
 ]

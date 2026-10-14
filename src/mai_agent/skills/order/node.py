@@ -11,7 +11,7 @@ from mai_agent.catalog import find_product
 from mai_agent.llm import invoke_tool
 from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
-from mai_agent.skills.order.tools import resolve_order_product
+from mai_agent.skills.order.tools import normalize_order_items, resolve_order_product
 from mai_agent.skills.product.tools import check_product_stock
 from mai_agent.state import AgentState
 
@@ -477,14 +477,15 @@ def _interpret_order_request(
         raise RuntimeError(f"Gemini gọi tool không được hỗ trợ: {call['name']}")
     args = call["args"]
     items = args.get("items", [])
-    return {
-        "items": [
+    extracted_items = [
             {
                 "product_reference": item.get("product_reference") or None,
                 "quantity": _validated_quantity(text, item),
             }
             for item in items
-        ],
+        ]
+    return {
+        "items": normalize_order_items(text, extracted_items),
         "address": " ".join(str(args.get("address", "")).split()),
         "phone": str(args.get("phone", "")).strip(),
     }
@@ -950,6 +951,9 @@ def _check_stock(state: AgentState, product_id: str, quantity: int) -> dict[str,
             "quantity": quantity,
             "skin_type": customer.get("skin_type"),
             "excluded_ingredients": customer.get("excluded_ingredients", []),
+            "sensitivities": customer.get("sensitivities", []),
+            "allergies": customer.get("allergies", []),
+            "disliked_product_ids": customer.get("disliked_product_ids", []),
         }
     )
 
@@ -1670,12 +1674,13 @@ def _reply_after_cart_ready(
     address: str | None,
     phone: str | None,
 ) -> dict[str, Any]:
+    total_amount = sum(item["quantity"] * item["unit_price"] for item in cart)
+    item_summary = ", ".join(
+        f"{item['product_id']} - {item['product_name']} x{item['quantity']} "
+        f"({item['unit_price']:,} đồng/sản phẩm)"
+        for item in cart
+    )
     if address and phone:
-        total_amount = sum(item["quantity"] * item["unit_price"] for item in cart)
-        item_summary = ", ".join(
-            f"{item['product_id']} - {item['product_name']} x{item['quantity']}" for item in cart
-        )
-
         return _reply(
             f"Đọc lại toàn bộ đơn để khách xác nhận: {item_summary}; "
             f"tổng tiền {total_amount:,} đồng; địa chỉ {address}; "
@@ -1690,17 +1695,15 @@ def _reply_after_cart_ready(
             },
         )
 
-    missing_fields = []
     if not address:
-        missing_fields.append("địa chỉ giao hàng có tên đường/khu vực")
-    if not phone:
-        missing_fields.append("số điện thoại hợp lệ")
+        next_field = "địa chỉ giao hàng có tên đường/khu vực"
+    else:
+        next_field = "số điện thoại hợp lệ"
 
     return _reply(
-        "Đã kiểm tra sản phẩm và số lượng. "
-        "Đã lưu thông tin giao hàng hợp lệ. "
-        f"Hỏi khách cung cấp phần còn thiếu: {', '.join(missing_fields)}. "
-        "Không được dùng số điện thoại làm địa chỉ.",
+        f"Xác nhận đã thêm vào giỏ: {item_summary}; tạm tính {total_amount:,} đồng. "
+        f"Hỏi khách cung cấp {next_field}. "
+        "Chỉ hỏi đúng trường tiếp theo này. Không được dùng số điện thoại làm địa chỉ.",
         {
             "current_step": "collecting_address",
             "cart": cart,

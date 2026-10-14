@@ -8,7 +8,13 @@ from mai_agent.llm import create_chat_model
 def generate_reply(business_context: str, *, response_language: str = "vi") -> str:
     """Để Gemini viết lời đáp từ dữ liệu nghiệp vụ do code cung cấp."""
     model = create_chat_model()
-    language_name = "English" if response_language == "en" else "Vietnamese"
+    language_name = {
+        "vi": "Vietnamese",
+        "en": "English",
+        "zh": "Simplified Chinese",
+        "ko": "Korean",
+        "es": "Spanish",
+    }.get(response_language, "Vietnamese")
     response = model.invoke(
         [
             SystemMessage(

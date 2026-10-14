@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -18,6 +19,17 @@ from mai_agent.skills.handoff.tools import HANDOFF_TOOLS
 from mai_agent.state import AgentState, HandoffAction
 
 ACTIVE_HANDOFF_STATUSES = {"waiting_for_human", "human_active"}
+
+
+def _explicit_human_escalation(text: str) -> bool:
+    normalized = text.casefold()
+    return bool(
+        re.search(
+            r"\b(khiếu nại|gặp chủ shop|gặp nhân viên|nói chuyện.*nhân viên|"
+            r"nhân viên.*trực tiếp|complaint|human agent)\b",
+            normalized,
+        )
+    )
 
 
 def _conversation_text(state: AgentState, *, limit: int = 20) -> str:
@@ -105,8 +117,13 @@ def handoff_guard_node(state: AgentState) -> dict[str, Any]:
 
     complaint_count = counts.get(issue_type, 0)
     should_handoff = bool(
+        _explicit_human_escalation(latest_user_text(state))
+        or
         assessment.get("requests_human")
-        or assessment.get("negative_intensity") == "strong"
+        or (
+            assessment.get("is_complaint")
+            and assessment.get("negative_intensity") == "strong"
+        )
         or (
             assessment.get("is_complaint")
             and complaint_count >= 2

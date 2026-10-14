@@ -4,7 +4,11 @@ from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Any, Protocol, TypedDict
 
-from mai_agent.catalog import load_products, normalize_product_reference
+from mai_agent.catalog import (
+    load_products,
+    normalize_product_reference,
+    product_alias_candidates,
+)
 from mai_agent.skills.product.embeddings import get_product_embeddings
 
 
@@ -63,7 +67,18 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
         if not normalized_reference:
             continue
 
-        exact = next(
+        alias_ids = product_alias_candidates(reference)
+        if alias_ids:
+            alias_products = [product for product in products if product["id"] in alias_ids]
+            if len(alias_products) == 1:
+                exact = alias_products[0]
+            else:
+                unresolved.append(reference)
+                continue
+        else:
+            exact = None
+
+        exact = exact or next(
             (
                 product
                 for product in products
@@ -130,6 +145,38 @@ class ProductVectorStore:
                 [chunk["content"] for chunk in self.chunks]
             )
 
+    @staticmethod
+    def _lexical_score(query: str, chunk: ProductChunk) -> float:
+        normalized_query = normalize_product_reference(query)
+        query_terms = set(normalized_query.split())
+        content_terms = set(normalize_product_reference(chunk["content"]).split())
+        overlap = len(query_terms & content_terms) / max(len(query_terms), 1)
+        section_cues = {
+            "overview": ("gia", "price", "cost", "spf", "skin", "da"),
+            "ingredients": ("thanh phan", "hoat chat", "ingredient"),
+            "benefits": ("cong dung", "benefit", "hieu qua"),
+            "usage": ("cach dung", "dung", "buoc", "use", "apply", "dap"),
+        }
+        cue_bonus = 0.5 if any(
+            cue in normalized_query for cue in section_cues.get(chunk["section"], ())
+        ) else 0.0
+        return round(overlap + cue_bonus, 6)
+
+    def _lexical_search(
+        self,
+        query: str,
+        *,
+        allowed_ids: set[str],
+        top_k: int,
+    ) -> list[SearchResult]:
+        candidates = [
+            {**chunk, "score": self._lexical_score(query, chunk)}
+            for chunk in self.chunks
+            if not allowed_ids or chunk["product_id"].upper() in allowed_ids
+        ]
+        candidates.sort(key=lambda item: item["score"], reverse=True)
+        return candidates[:top_k]
+
     def search(
         self,
         query: str,
@@ -141,9 +188,26 @@ class ProductVectorStore:
         if not normalized_query or top_k <= 0:
             return []
 
-        self._ensure_index()
-        query_vector = self.embeddings.embed_query(normalized_query)
         allowed_ids = {product_id.upper() for product_id in product_ids or []}
+        # Exact catalog resolution is stronger than semantic similarity. It also
+        # keeps product facts available when the configured embedding endpoint is
+        # temporarily unavailable or rejects a model name.
+        if allowed_ids:
+            return self._lexical_search(
+                normalized_query,
+                allowed_ids=allowed_ids,
+                top_k=top_k,
+            )
+
+        try:
+            self._ensure_index()
+            query_vector = self.embeddings.embed_query(normalized_query)
+        except Exception:
+            return self._lexical_search(
+                normalized_query,
+                allowed_ids=set(),
+                top_k=top_k,
+            )
         candidates: list[SearchResult] = []
 
         for chunk, vector in zip(self.chunks, self.vectors or [], strict=True):

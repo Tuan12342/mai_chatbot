@@ -6,6 +6,9 @@ from langgraph.graph.message import add_messages
 LanguageCode = Literal[
     "vi",
     "en",
+    "zh",
+    "ko",
+    "es",
     "unknown",
 ]
 
@@ -104,6 +107,8 @@ class SessionState(TypedDict, total=False):
     pending_available_quantity: int | None
     pending_order_lookup_id: str | None
     pending_order_lookup_attempts: int
+    pending_profile_update: dict[str, Any] | None
+    pending_profile_reason: str | None
 
 
 class CustomerProfile(TypedDict, total=False):
@@ -114,6 +119,11 @@ class CustomerProfile(TypedDict, total=False):
     is_sensitive: bool
     sensitivities: list[str]
     allergies: list[str]
+    concerns: list[str]
+    excluded_ingredients: list[str]
+    disliked_product_ids: list[str]
+    profile_metadata: dict[str, dict[str, str]]
+    last_updated: str
     purchase_history: list[str]
     addresses: list[Address]
 
@@ -160,3 +170,5 @@ class AgentState(TypedDict, total=False):
     active_order: Annotated[OrderState, merge_mapping]
     handoff: Annotated[HandoffState, merge_mapping]
     handoff_action: HandoffAction
+    policy_handled: bool
+    profile_memory_handled: bool

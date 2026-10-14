@@ -1,4 +1,5 @@
 
+import re
 from typing import Any, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -20,13 +21,16 @@ def latest_user_text(state: AgentState) -> str:
 
 
 def detect_language_node(state: AgentState) -> dict[str, Any]:
-    
     session = state.get("session", {})
     customer = state.get("customer", {})
     current_language = session.get("language_code")
-    if current_language not in {"vi", "en"}:
+    if current_language not in {"vi", "en", "zh", "ko", "es"}:
         preferred_language = customer.get("preferred_language")
-        current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
+        current_language = (
+            preferred_language
+            if preferred_language in {"vi", "en", "zh", "ko", "es"}
+            else "vi"
+        )
 
     text = latest_user_text(state).strip()
     letters = [character for character in text if character.isalpha()]
@@ -34,9 +38,22 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
     if not text or len(letters) <= 2 or is_product_code:
         return {"session": {"language_code": current_language}}
 
-    detected_language = lang_detect(text)
+    if re.search(r"[\u4e00-\u9fff]", text):
+        detected_language = "zh"
+    elif re.search(r"[\uac00-\ud7af]", text):
+        detected_language = "ko"
+    elif re.search(
+        r"[¿¡]|\b(hola|tienen|producto|protector|solar|gracias|quiero)\b",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        detected_language = "es"
+    else:
+        detected_language = lang_detect(text)
     language: LanguageCode = (
-        detected_language if detected_language in {"vi", "en"} else current_language
+        detected_language
+        if detected_language in {"vi", "en", "zh", "ko", "es"}
+        else current_language
     )
     return {"session": {"language_code": language}}
 
