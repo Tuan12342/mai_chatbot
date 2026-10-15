@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     google_model: str = "gemini-3.5-flash-lite"
     google_embedding_model: str = "models/gemini-embedding-2"
+    google_vlm_model: str = "gemini-3.5-flash-lite"
+    google_search_model: str = "gemini-3.5-flash-lite"
+    skin_web_search_enabled: bool = True
+    skin_image_max_bytes: int = 8 * 1024 * 1024
+    skin_vision_min_confidence: float = 0.60
+    skin_search_allowed_domains: str = (
+        "aad.org,nhs.uk,who.int,fda.gov,mayoclinic.org,pubmed.ncbi.nlm.nih.gov"
+    )
     misa_api_key: str = ""
     misa_base_url: str = "https://ai.misa.vn/nlp/llm-gateway/v1"
     misa_model: str = "misa-ai-1.1-plus"

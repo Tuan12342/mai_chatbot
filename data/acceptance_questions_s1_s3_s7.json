@@ -31,16 +31,21 @@
     "S4-Q44": "Tính phí ship",
     "S4-Q46": "Có phí ship và bước gửi QR",
     "S4-Q47": "Fallback khi tạo QR lỗi",
-    "S4-Q50": "Khôi phục giỏ hàng từ phiên trước"
+    "S4-Q50": "Khôi phục giỏ hàng từ phiên trước",
+    "S7-Q26": "Tiếng Trung không còn thuộc phạm vi hỗ trợ",
+    "S7-Q27": "Tiếng Trung không còn thuộc phạm vi hỗ trợ",
+    "S7-Q28": "Tiếng Hàn không còn thuộc phạm vi hỗ trợ",
+    "S7-Q49": "Tiếng Tây Ban Nha không còn thuộc phạm vi hỗ trợ",
+    "S7-Q50": "Kịch bản có tiếng Trung không còn thuộc phạm vi hỗ trợ"
   },
-  "total_cases": 272,
+  "total_cases": 267,
   "cases_per_requirement": {
     "S1": 50,
     "S3": 50,
     "S4": 22,
     "S5": 50,
     "S6": 50,
-    "S7": 50
+    "S7": 45
   },
   "cases": [
     {
@@ -2266,7 +2271,7 @@
     {
       "case_id": "S7-Q01",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Hi, do you sell a cleanser for oily skin?",
@@ -2276,7 +2281,7 @@
     {
       "case_id": "S7-Q02",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What are the ingredients in your Hydrating Toner?",
@@ -2286,7 +2291,7 @@
     {
       "case_id": "S7-Q03",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Do you sell vitamin C serum?",
@@ -2296,7 +2301,7 @@
     {
       "case_id": "S7-Q04",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Is your sunscreen SPF 50?",
@@ -2306,7 +2311,7 @@
     {
       "case_id": "S7-Q05",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Which is better for dry skin, Ceramide Cream or Oil-Free Gel Cream?",
@@ -2316,7 +2321,7 @@
     {
       "case_id": "S7-Q06",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Can I use Brightening Serum during pregnancy?",
@@ -2326,7 +2331,7 @@
     {
       "case_id": "S7-Q07",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Does the serum contain alcohol or fragrance?",
@@ -2336,7 +2341,7 @@
     {
       "case_id": "S7-Q08",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "I'd like to order one Daily UV Fluid.",
@@ -2346,7 +2351,7 @@
     {
       "case_id": "S7-Q09",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Tôi muốn đặt 1 kem chống nắng. (Khách đổi sang tiếng Việt sau Q8)",
@@ -2356,7 +2361,7 @@
     {
       "case_id": "S7-Q10",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "scenario",
       "precondition": "Giữa phiên",
       "user_message": "Please add one Barrier Repair Serum too.",
@@ -2366,7 +2371,7 @@
     {
       "case_id": "S7-Q11",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "OA004 please. Giao về 12 Lê Văn Lương nhé.",
@@ -2376,7 +2381,7 @@
     {
       "case_id": "S7-Q12",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Can you show me the order summary in English?",
@@ -2386,7 +2391,7 @@
     {
       "case_id": "S7-Q13",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Yes, send the QR.",
@@ -2396,7 +2401,7 @@
     {
       "case_id": "S7-Q14",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What is Niacinamide?",
@@ -2406,7 +2411,7 @@
     {
       "case_id": "S7-Q15",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Alpha Arbutin dịch sang tiếng Việt là gì em?",
@@ -2416,7 +2421,7 @@
     {
       "case_id": "S7-Q16",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What does Panthenol do?",
@@ -2426,7 +2431,7 @@
     {
       "case_id": "S7-Q17",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Is this product suitable for sensitive skin? (hỏi về Gentle Cleanser)",
@@ -2436,7 +2441,7 @@
     {
       "case_id": "S7-Q18",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Hi, I'm in Singapore, do you ship internationally?",
@@ -2446,7 +2451,7 @@
     {
       "case_id": "S7-Q19",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What's the price of the Soothing Mask?",
@@ -2456,7 +2461,7 @@
     {
       "case_id": "S7-Q20",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "scenario",
       "precondition": "Đang chốt đơn bằng tiếng Việt, chị gõ tiếng Anh",
       "user_message": "Change the address to 15 Trần Duy Hưng.",
@@ -2466,7 +2471,7 @@
     {
       "case_id": "S7-Q21",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "scenario",
       "precondition": "Quay lại tiếng Việt",
       "user_message": "Chị lấy thêm 2 mặt nạ nhé.",
@@ -2476,7 +2481,7 @@
     {
       "case_id": "S7-Q22",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Em nhớ da chị là loại da gì? (sau khi đã chat tiếng Anh)",
@@ -2486,7 +2491,7 @@
     {
       "case_id": "S7-Q23",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "I have combination skin and I don't like products for oily skin. (profile bằng tiếng Anh)",
@@ -2496,7 +2501,7 @@
     {
       "case_id": "S7-Q24",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "scenario",
       "precondition": "Phiên sau, tiếng Việt",
       "user_message": "Gợi ý kem dưỡng cho chị nhé.",
@@ -2506,7 +2511,7 @@
     {
       "case_id": "S7-Q25",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Could you recommend a routine for dry skin?",
@@ -2514,39 +2519,9 @@
       "expected_action": null
     },
     {
-      "case_id": "S7-Q26",
-      "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
-      "case_type": "standalone",
-      "precondition": null,
-      "user_message": "你们有防晒霜吗？",
-      "expected_answer": "有的，OA Daily UV Fluid SPF 50+ PA++++，适合所有肤质，价格315,000越南盾。需要我帮您下单吗？",
-      "expected_action": null
-    },
-    {
-      "case_id": "S7-Q27",
-      "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
-      "case_type": "standalone",
-      "precondition": null,
-      "user_message": "敏感肌可以用 Gentle Cleanser 吗？",
-      "expected_answer": "OA Gentle Cleanser (OA001) 适合普通、干性和敏感肌，含 Glycerin、Panthenol 和燕麦提取物。建议先在小范围皮肤试用。",
-      "expected_action": null
-    },
-    {
-      "case_id": "S7-Q28",
-      "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
-      "case_type": "standalone",
-      "precondition": null,
-      "user_message": "선크림 있어요?",
-      "expected_answer": "네, OA Daily UV Fluid SPF 50+ PA++++가 있고 모든 피부 타입에 적합해요. 가격은 315,000 VND입니다. 주문 도와드릴까요?",
-      "expected_action": null
-    },
-    {
       "case_id": "S7-Q29",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Do you speak Thai?",
@@ -2556,7 +2531,7 @@
     {
       "case_id": "S7-Q30",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "scenario",
       "precondition": "Khách viết trộn",
       "user_message": "Cho mình hỏi Barrier Repair Serum có hợp với sensitive skin không?",
@@ -2566,7 +2541,7 @@
     {
       "case_id": "S7-Q31",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Serum này có chứa retinol không? (hỏi bằng tiếng Việt, tiếp sau là English)",
@@ -2576,7 +2551,7 @@
     {
       "case_id": "S7-Q32",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Can you translate the usage instructions for Micellar Water to English?",
@@ -2586,7 +2561,7 @@
     {
       "case_id": "S7-Q33",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Give me the Vietnamese name of each ingredient in Gentle Cleanser.",
@@ -2596,7 +2571,7 @@
     {
       "case_id": "S7-Q34",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Is Ceramide NP the same as Ceramide Complex?",
@@ -2606,7 +2581,7 @@
     {
       "case_id": "S7-Q35",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "How do I use Barrier Repair Serum?",
@@ -2616,7 +2591,7 @@
     {
       "case_id": "S7-Q36",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What's your return policy?",
@@ -2626,7 +2601,7 @@
     {
       "case_id": "S7-Q37",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "I want to talk to a real person.",
@@ -2636,7 +2611,7 @@
     {
       "case_id": "S7-Q38",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Cancel my order DH2340.",
@@ -2646,7 +2621,7 @@
     {
       "case_id": "S7-Q39",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Tell me about other customers' orders.",
@@ -2656,7 +2631,7 @@
     {
       "case_id": "S7-Q40",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What discount do agents get?",
@@ -2666,7 +2641,7 @@
     {
       "case_id": "S7-Q41",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Can you diagnose my rash?",
@@ -2676,7 +2651,7 @@
     {
       "case_id": "S7-Q42",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Brightening Serum có tốt hơn Alpha Arbutin 2% không? (nhầm lẫn tên thành phần)",
@@ -2686,7 +2661,7 @@
     {
       "case_id": "S7-Q43",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What's in the Oil-Free Gel Cream, in Vietnamese please.",
@@ -2696,7 +2671,7 @@
     {
       "case_id": "S7-Q44",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Thank you! (khách cảm ơn bằng tiếng Anh sau cuộc trò chuyện tiếng Việt)",
@@ -2706,7 +2681,7 @@
     {
       "case_id": "S7-Q45",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "What's the stock of Gentle Cleanser?",
@@ -2716,7 +2691,7 @@
     {
       "case_id": "S7-Q46",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "I want 15 Gentle Cleanser.",
@@ -2726,7 +2701,7 @@
     {
       "case_id": "S7-Q47",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Bao nhiêu tiền 2 Hydrating Toner? Tell me in English too.",
@@ -2736,31 +2711,11 @@
     {
       "case_id": "S7-Q48",
       "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
+      "requirement_name": "Tiếng Việt và tiếng Anh",
       "case_type": "standalone",
       "precondition": null,
       "user_message": "Em dịch giúp chị câu này cho khách nước ngoài: \"Sản phẩm này hợp da khô\".",
       "expected_answer": "Dạ em dịch: \"This product is suitable for dry skin.\" Chị có cần em dịch thêm câu nào không ạ?",
-      "expected_action": null
-    },
-    {
-      "case_id": "S7-Q49",
-      "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
-      "case_type": "standalone",
-      "precondition": null,
-      "user_message": "Hola, ¿tienen protector solar?",
-      "expected_answer": "¡Hola! Sí, tenemos OA Daily UV Fluid SPF 50+ PA++++, apto para todo tipo de piel, a 315,000 VND. ¿Le gustaría hacer un pedido? (Los nombres de los productos se mantienen en inglés.)",
-      "expected_action": null
-    },
-    {
-      "case_id": "S7-Q50",
-      "requirement": "S7",
-      "requirement_name": "Đa ngôn ngữ",
-      "case_type": "scenario",
-      "precondition": "Khách đổi ngôn ngữ nhiều lần trong 1 đơn",
-      "user_message": "Hello → Xin chào → 你好, giữ giỏ hàng nhé.",
-      "expected_answer": "Em vẫn giữ nguyên giỏ hàng, hồ sơ da và địa chỉ của chị khi chị đổi ngôn ngữ ạ. Your cart is safe, and 您的购物车已保留。Chị muốn tiếp tục bằng ngôn ngữ nào ạ?",
       "expected_action": null
     }
   ]

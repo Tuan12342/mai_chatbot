@@ -1,7 +1,7 @@
-# Bộ 272 câu hỏi acceptance — phạm vi đã triển khai
+# Bộ 267 câu hỏi acceptance — phạm vi đã triển khai
 
 S2 (tra đơn và tồn kho) đã được loại hoàn toàn.
-Các chức năng S4 chưa triển khai được loại theo `data/acceptance_scope.json`.
+Các chức năng S4 chưa triển khai và ngôn ngữ ngoài Việt/Anh được loại theo `data/acceptance_scope.json`.
 
 ## S1 — RAG sản phẩm có kiểm soát
 
@@ -1245,7 +1245,7 @@ Các chức năng S4 chưa triển khai được loại theo `data/acceptance_sc
 - Kỳ vọng: Dạ đúng ạ. Đơn đã thanh toán hoặc đã xác nhận thì em chỉ tạo yêu cầu, chủ shop duyệt rồi mới huỷ được. Riêng đơn nháp chưa thanh toán thì chị tự huỷ được ngay với em ạ.
 - Hành động kỳ vọng: giải thích chính sách đúng với quy trình.
 
-## S7 — Đa ngôn ngữ
+## S7 — Tiếng Việt và tiếng Anh
 
 ### S7-Q01
 
@@ -1376,21 +1376,6 @@ Các chức năng S4 chưa triển khai được loại theo `data/acceptance_sc
 - Khách: Could you recommend a routine for dry skin?
 - Kỳ vọng: For dry skin: Gentle Cleanser, Hydrating Toner, Barrier Repair Serum, Ceramide Cream, then Daily UV Fluid in the morning. Shall I note dry skin in your profile?
 
-### S7-Q26
-
-- Khách: 你们有防晒霜吗？
-- Kỳ vọng: 有的，OA Daily UV Fluid SPF 50+ PA++++，适合所有肤质，价格315,000越南盾。需要我帮您下单吗？
-
-### S7-Q27
-
-- Khách: 敏感肌可以用 Gentle Cleanser 吗？
-- Kỳ vọng: OA Gentle Cleanser (OA001) 适合普通、干性和敏感肌，含 Glycerin、Panthenol 和燕麦提取物。建议先在小范围皮肤试用。
-
-### S7-Q28
-
-- Khách: 선크림 있어요?
-- Kỳ vọng: 네, OA Daily UV Fluid SPF 50+ PA++++가 있고 모든 피부 타입에 적합해요. 가격은 315,000 VND입니다. 주문 도와드릴까요?
-
 ### S7-Q29
 
 - Khách: Do you speak Thai?
@@ -1493,14 +1478,3 @@ Các chức năng S4 chưa triển khai được loại theo `data/acceptance_sc
 
 - Khách: Em dịch giúp chị câu này cho khách nước ngoài: "Sản phẩm này hợp da khô".
 - Kỳ vọng: Dạ em dịch: "This product is suitable for dry skin." Chị có cần em dịch thêm câu nào không ạ?
-
-### S7-Q49
-
-- Khách: Hola, ¿tienen protector solar?
-- Kỳ vọng: ¡Hola! Sí, tenemos OA Daily UV Fluid SPF 50+ PA++++, apto para todo tipo de piel, a 315,000 VND. ¿Le gustaría hacer un pedido? (Los nombres de los productos se mantienen en inglés.)
-
-### S7-Q50
-
-- Precondition: Khách đổi ngôn ngữ nhiều lần trong 1 đơn
-- Khách: Hello → Xin chào → 你好, giữ giỏ hàng nhé.
-- Kỳ vọng: Em vẫn giữ nguyên giỏ hàng, hồ sơ da và địa chỉ của chị khi chị đổi ngôn ngữ ạ. Your cart is safe, and 您的购物车已保留。Chị muốn tiếp tục bằng ngôn ngữ nào ạ?

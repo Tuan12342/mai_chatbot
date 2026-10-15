@@ -1,5 +1,3 @@
-
-import re
 from typing import Any, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -24,38 +22,25 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
     session = state.get("session", {})
     customer = state.get("customer", {})
     current_language = session.get("language_code")
-    if current_language not in {"vi", "en", "zh", "ko", "es"}:
+    if current_language not in {"vi", "en"}:
         preferred_language = customer.get("preferred_language")
-        current_language = (
-            preferred_language
-            if preferred_language in {"vi", "en", "zh", "ko", "es"}
-            else "vi"
-        )
+        current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
 
     text = latest_user_text(state).strip()
+    normalized_text = text.casefold().strip(" .,!?")
+    if normalized_text in {"hi", "hello", "thanks", "thank you", "yes", "no"}:
+        return {"session": {"language_code": "en"}}
     letters = [character for character in text if character.isalpha()]
     is_product_code = any(character.isdigit() for character in text) and len(letters) <= 5
     if not text or len(letters) <= 2 or is_product_code:
         return {"session": {"language_code": current_language}}
 
-    if re.search(r"[\u4e00-\u9fff]", text):
-        detected_language = "zh"
-    elif re.search(r"[\uac00-\ud7af]", text):
-        detected_language = "ko"
-    elif re.search(
-        r"[¿¡]|\b(hola|tienen|producto|protector|solar|gracias|quiero)\b",
-        text,
-        flags=re.IGNORECASE,
-    ):
-        detected_language = "es"
-    else:
-        detected_language = lang_detect(text)
+    detected_language = lang_detect(text)
     language: LanguageCode = (
-        detected_language
-        if detected_language in {"vi", "en", "zh", "ko", "es"}
-        else current_language
+        detected_language if detected_language in {"vi", "en"} else current_language
     )
     return {"session": {"language_code": language}}
+
 
 @tool
 def route_order() -> str:

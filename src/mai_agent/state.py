@@ -6,9 +6,6 @@ from langgraph.graph.message import add_messages
 LanguageCode = Literal[
     "vi",
     "en",
-    "zh",
-    "ko",
-    "es",
     "unknown",
 ]
 

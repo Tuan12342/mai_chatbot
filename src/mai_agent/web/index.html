@@ -46,7 +46,13 @@
     .typing-dots span:nth-child(2) { animation-delay:150ms; }
     .typing-dots span:nth-child(3) { animation-delay:300ms; }
     .composer-area { padding:9px 24px 20px 31px; }
-    .composer { display:grid; grid-template-columns:1fr auto; align-items:end; gap:10px; padding:9px 9px 9px 18px; border:1px solid var(--border); border-radius:19px; background:#fff; box-shadow:0 14px 36px rgba(82,39,51,.08); }
+    .composer { display:grid; grid-template-columns:auto 1fr auto; align-items:end; gap:10px; padding:9px; border:1px solid var(--border); border-radius:19px; background:#fff; box-shadow:0 14px 36px rgba(82,39,51,.08); }
+    .attach { width:42px; height:42px; border:1px solid var(--border); border-radius:14px; background:#fff5f8; color:var(--brand); cursor:pointer; font-size:18px; }
+    .attach:hover { background:#fbe7ed; }
+    .image-consent { display:none; margin:8px 4px 0; color:var(--muted); font-size:11px; line-height:1.4; }
+    .image-consent.visible { display:flex; align-items:flex-start; gap:7px; }
+    .image-consent input { margin-top:2px; }
+    .image-name { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--brand-dark); font-weight:600; }
     textarea { width:100%; max-height:130px; resize:none; border:0; outline:0; background:transparent; color:var(--text); line-height:1.5; }
     textarea::placeholder { color:#b4a5aa; }
     .send { width:42px; height:42px; border:0; border-radius:14px; background:var(--brand); color:#fff; cursor:pointer; font-size:18px; transition:150ms ease; }
@@ -88,9 +94,15 @@
 
     <footer class="composer-area">
       <form class="composer" id="chat-form">
+        <button class="attach" id="attach" type="button" aria-label="Đính kèm ảnh da" title="Đính kèm ảnh da">＋</button>
+        <input id="skin-image" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         <textarea id="input" rows="1" maxlength="4000" placeholder="Nhắn tin cho Mai…" aria-label="Tin nhắn"></textarea>
         <button class="send" id="send" type="submit" aria-label="Gửi tin nhắn">↑</button>
       </form>
+      <label class="image-consent" id="image-consent">
+        <input id="consent" type="checkbox">
+        <span>Tôi xác nhận đây là ảnh của tôi hoặc người trong ảnh đã đồng ý cho phân tích. <span class="image-name" id="image-name"></span></span>
+      </label>
       <div class="hint">Enter để gửi · Shift + Enter để xuống dòng</div>
     </footer>
   </main>
@@ -104,6 +116,11 @@
     const userSelect=document.querySelector("#user-select");
     const sessionSelect=document.querySelector("#session-select");
     const newSession=document.querySelector("#new-session");
+    const attach=document.querySelector("#attach");
+    const skinImage=document.querySelector("#skin-image");
+    const consent=document.querySelector("#consent");
+    const imageConsent=document.querySelector("#image-consent");
+    const imageName=document.querySelector("#image-name");
     let busy=false;
     let activeUserId=null;
     let activeSessionId=null;
@@ -145,7 +162,7 @@
       card.append(title,subtitle,qr,details,copy); row.appendChild(card); messages.appendChild(row); scrollToBottom();
     }
     function resizeInput(){ input.style.height="auto"; input.style.height=`${Math.min(input.scrollHeight,130)}px`; }
-    function setBusy(value){ busy=value; input.disabled=value; send.disabled=value; userSelect.disabled=value; sessionSelect.disabled=value; newSession.disabled=value; }
+    function setBusy(value){ busy=value; input.disabled=value; send.disabled=value; attach.disabled=value; userSelect.disabled=value; sessionSelect.disabled=value; newSession.disabled=value; }
     function updateStatus(data){
       const waiting=["waiting_for_human","human_active"].includes(data.handoff_status);
       status.classList.toggle("handoff",waiting);
@@ -153,19 +170,32 @@
     }
     async function sendMessage(text){
       const clean=text.trim(); if(!clean||busy||!activeUserId||!activeSessionId)return;
-      addMessage("user",clean); input.value=""; resizeInput(); setBusy(true);
+      const image=skinImage.files[0];
+      if(image&&!consent.checked){ addMessage("assistant","Bạn cần xác nhận quyền sử dụng ảnh trước khi gửi."); return; }
+      addMessage("user",image?`${clean}\n[Đã gửi ảnh da]`:clean); input.value=""; resizeInput(); setBusy(true);
       const typing=addTyping();
       try{
-        const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:activeSessionId,user_id:activeUserId,message:clean})});
+        let response;
+        if(image){
+          const body=new FormData(); body.append("session_id",activeSessionId); body.append("user_id",activeUserId); body.append("message",clean); body.append("consent","true"); body.append("image",image);
+          response=await fetch("/api/skin-analysis",{method:"POST",body});
+        }else{
+          response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:activeSessionId,user_id:activeUserId,message:clean})});
+        }
         const data=await response.json(); typing.remove();
         if(!response.ok)throw new Error(data.detail||"Không thể gửi tin nhắn.");
         addPaymentCard(data.payment);
         if(data.reply)addMessage("assistant",data.reply);
+        if(image&&data.analysis_status!=="need_confirmation"){ skinImage.value=""; consent.checked=false; imageConsent.classList.remove("visible"); imageName.textContent=""; }
         updateStatus(data); await refreshSessions();
       }catch(error){ typing.remove(); addMessage("assistant",error.message||"Có lỗi xảy ra. Vui lòng thử lại."); }
       finally{ setBusy(false); input.focus(); }
     }
     form.addEventListener("submit",event=>{ event.preventDefault(); sendMessage(input.value); });
+    attach.addEventListener("click",()=>{ if(!busy)skinImage.click(); });
+    skinImage.addEventListener("change",()=>{
+      const image=skinImage.files[0]; imageConsent.classList.toggle("visible",Boolean(image)); imageName.textContent=image?`(${image.name})`:""; if(!image)consent.checked=false;
+    });
     input.addEventListener("input",resizeInput);
     input.addEventListener("keydown",event=>{ if(event.key==="Enter"&&!event.shiftKey){ event.preventDefault(); form.requestSubmit(); } });
     async function refreshSessions(){

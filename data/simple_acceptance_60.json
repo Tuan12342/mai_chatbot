@@ -307,64 +307,64 @@
     },
 
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 1,
       "question": "How much is the OA Gentle Cleanser?",
       "expected_answer": "Answer in English: OA Gentle Cleanser (OA001) costs 189,000 VND."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 2,
       "question": "Is OA Purifying Gel suitable for oily skin?",
       "expected_answer": "Answer in English: Yes. OA Purifying Gel (OA002) is suitable for oily and combination skin."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 3,
       "question": "How do I use Barrier Repair Serum OA004?",
       "expected_answer": "Answer in English: Apply 2–3 drops of Barrier Repair Serum (OA004) after toner, morning and evening."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 4,
       "question": "I'd like to order one Daily UV Fluid.",
       "expected_answer": "Answer in English: confirm one OA Daily UV Fluid (OA008) at 315,000 VND and ask for the delivery address."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 5,
-      "question": "你们有防晒霜吗？",
-      "expected_answer": "用中文回答：有，OA Daily UV Fluid（OA008）是 SPF 50+ PA++++，价格 315,000 越南盾。"
+      "question": "What are the ingredients in OA Hydrating Toner?",
+      "expected_answer": "Answer in English and list the catalog ingredients of OA Hydrating Toner (OA003) without inventing any ingredient."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 6,
-      "question": "OA Gentle Cleanser 多少钱？",
-      "expected_answer": "用中文回答：OA Gentle Cleanser（OA001）的价格是 189,000 越南盾。"
+      "question": "Is OA Daily UV Fluid a sunscreen?",
+      "expected_answer": "Answer in English: Yes. OA Daily UV Fluid (OA008) has SPF 50+ PA++++ and costs 315,000 VND."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 7,
-      "question": "선크림 있어요?",
-      "expected_answer": "한국어로 답변: OA Daily UV Fluid(OA008)가 있으며 SPF 50+ PA++++이고 가격은 315,000동입니다."
+      "question": "OA Gentle Cleanser giá bao nhiêu?",
+      "expected_answer": "Trả lời bằng tiếng Việt: OA Gentle Cleanser (OA001) có giá 189.000đ."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 8,
-      "question": "Soothing Mask 가격이 얼마예요?",
-      "expected_answer": "한국어로 답변: OA Soothing Mask(OA009)의 가격은 49,000동입니다."
+      "question": "OA Soothing Mask hợp với loại da nào?",
+      "expected_answer": "Trả lời bằng tiếng Việt và nêu đúng các loại da phù hợp của OA Soothing Mask (OA009) theo catalog."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 9,
-      "question": "Hola, ¿tienen protector solar?",
-      "expected_answer": "Responder en español: Sí, OA Daily UV Fluid (OA008) tiene SPF 50+ PA++++ y cuesta 315.000 VND."
+      "question": "Cách dùng OA Micellar Water như thế nào?",
+      "expected_answer": "Trả lời bằng tiếng Việt và hướng dẫn đúng cách dùng OA Micellar Water (OA010) theo catalog."
     },
     {
-      "section": "Mục 7. Đa ngôn ngữ",
+      "section": "Mục 7. Tiếng Việt và tiếng Anh",
       "number": 10,
-      "question": "¿Cuánto cuesta OA Gentle Cleanser?",
-      "expected_answer": "Responder en español: OA Gentle Cleanser (OA001) cuesta 189.000 VND."
+      "question": "OA Barrier Repair Serum có những thành phần chính nào?",
+      "expected_answer": "Trả lời bằng tiếng Việt và liệt kê đúng thành phần của OA Barrier Repair Serum (OA004), không bịa thêm."
     }
   ]
 }

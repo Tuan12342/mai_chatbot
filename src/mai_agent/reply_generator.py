@@ -11,9 +11,6 @@ def generate_reply(business_context: str, *, response_language: str = "vi") -> s
     language_name = {
         "vi": "Vietnamese",
         "en": "English",
-        "zh": "Simplified Chinese",
-        "ko": "Korean",
-        "es": "Spanish",
     }.get(response_language, "Vietnamese")
     response = model.invoke(
         [

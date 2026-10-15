@@ -1,5 +1,5 @@
 {
-  "description": "Phạm vi acceptance hiện tại: bỏ S2 và các chức năng S4 chưa triển khai.",
+  "description": "Phạm vi acceptance hiện tại: bỏ S2, các chức năng S4 chưa triển khai và ngôn ngữ ngoài tiếng Việt/Anh.",
   "excluded_sections": [2],
   "excluded_cases": {
     "S4-Q11": "Có phí ship và luồng gửi QR",
@@ -29,6 +29,11 @@
     "S4-Q44": "Tính phí ship",
     "S4-Q46": "Có phí ship và bước gửi QR",
     "S4-Q47": "Fallback khi tạo QR lỗi",
-    "S4-Q50": "Khôi phục giỏ hàng từ phiên trước"
+    "S4-Q50": "Khôi phục giỏ hàng từ phiên trước",
+    "S7-Q26": "Tiếng Trung không còn thuộc phạm vi hỗ trợ",
+    "S7-Q27": "Tiếng Trung không còn thuộc phạm vi hỗ trợ",
+    "S7-Q28": "Tiếng Hàn không còn thuộc phạm vi hỗ trợ",
+    "S7-Q49": "Tiếng Tây Ban Nha không còn thuộc phạm vi hỗ trợ",
+    "S7-Q50": "Kịch bản có tiếng Trung không còn thuộc phạm vi hỗ trợ"
   }
 }

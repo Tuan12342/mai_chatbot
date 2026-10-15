@@ -4,9 +4,9 @@ import sqlite3
 from importlib.resources import files
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -18,11 +18,13 @@ from mai_agent.chat_sessions import (
     list_chat_sessions,
     touch_chat_session,
 )
+from mai_agent.config import get_settings
 from mai_agent.customer_store import find_customer_by_zalo_id, load_customers
 from mai_agent.graph import create_agent_graph
 from mai_agent.observability import create_langfuse_handler
 from mai_agent.order_store import save_order
 from mai_agent.payment import build_vietqr_payment
+from mai_agent.vision import InvalidSkinImage, SkinConsultationService, sanitize_skin_image
 
 LOGGER = logging.getLogger(__name__)
 GRAPH_LOCK = Lock()
@@ -62,6 +64,8 @@ class ChatResponse(BaseModel):
     cart: list[dict[str, Any]]
     handoff_status: str
     payment: PaymentResponse | None = None
+    analysis_status: str | None = None
+    recommended_product_ids: list[str] = Field(default_factory=list)
 
 
 class ChatSession(BaseModel):
@@ -146,6 +150,29 @@ def _read_payment(session_id: str) -> dict[str, Any] | None:
     return _payment_for_order((snapshot.values or {}).get("active_order", {}))
 
 
+def _record_skin_exchange(session_id: str, user_id: str, message: str, reply: str) -> None:
+    """Chỉ lưu text và dấu mốc ảnh; tuyệt đối không đưa bytes/base64 vào checkpoint."""
+    safe_message = f"[Đã gửi ảnh da để phân tích riêng tư] {message}"
+    with GRAPH_LOCK:
+        graph.update_state(
+            _graph_config(session_id),
+            {
+                "user_id": user_id,
+                "messages": [
+                    HumanMessage(content=safe_message),
+                    AIMessage(content=reply),
+                ],
+                "reply": reply,
+            },
+        )
+
+
+def _read_session_state(session_id: str) -> dict[str, Any]:
+    with GRAPH_LOCK:
+        snapshot = graph.get_state(_graph_config(session_id))
+    return dict(snapshot.values or {})
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     html = files("mai_agent.web").joinpath("index.html").read_text(encoding="utf-8")
@@ -224,6 +251,69 @@ def chat(payload: ChatRequest) -> ChatResponse:
         cart=session.get("cart", []),
         handoff_status=handoff.get("status", "inactive"),
         payment=_payment_for_order(active_order),
+    )
+
+
+@app.post("/api/skin-analysis", response_model=ChatResponse)
+def skin_analysis(
+    session_id: Annotated[str, Form(min_length=1, max_length=100)],
+    user_id: Annotated[str, Form(min_length=1, max_length=100)],
+    message: Annotated[str, Form(min_length=1, max_length=4000)],
+    consent: Annotated[bool, Form()],
+    image: Annotated[UploadFile, File()],
+) -> ChatResponse:
+    _require_test_user(user_id)
+    if get_chat_session(session_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
+    if not consent:
+        raise HTTPException(
+            status_code=400,
+            detail="Cần xác nhận người trong ảnh đã đồng ý cho phân tích.",
+        )
+
+    settings = get_settings()
+    uploaded = image.file.read(settings.skin_image_max_bytes + 1)
+    try:
+        image_bytes, mime_type = sanitize_skin_image(
+            uploaded,
+            image.content_type or "",
+            settings.skin_image_max_bytes,
+        )
+    except InvalidSkinImage as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    customer = find_customer_by_zalo_id(user_id) or {}
+    try:
+        consultation = SkinConsultationService(settings=settings).consult(
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            message=message.strip(),
+            customer=customer,
+        )
+        _record_skin_exchange(session_id, user_id, message.strip(), consultation.reply)
+        touch_chat_session(session_id, user_id, message.strip())
+    except Exception as error:
+        LOGGER.exception("Không thể xử lý yêu cầu phân tích ảnh da", exc_info=error)
+        raise HTTPException(
+            status_code=502,
+            detail="Mai chưa thể phân tích ảnh lúc này. Vui lòng thử lại sau.",
+        ) from error
+    finally:
+        # Không giữ tham chiếu đến dữ liệu ảnh lâu hơn vòng đời request.
+        image_bytes = b""
+        uploaded = b""
+
+    state = _read_session_state(session_id)
+    session = state.get("session", {})
+    handoff = state.get("handoff", {})
+    return ChatResponse(
+        reply=consultation.reply,
+        current_step=session.get("current_step", "idle"),
+        cart=session.get("cart", []),
+        handoff_status=handoff.get("status", "inactive"),
+        payment=_payment_for_order(state.get("active_order", {})),
+        analysis_status=consultation.status,
+        recommended_product_ids=consultation.product_ids,
     )
 
 

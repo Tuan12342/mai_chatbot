@@ -15,6 +15,50 @@ Nếu port 8000 đang được dùng:
 MAI_AGENT_WEB_PORT=8765 uv run mai-agent-web
 ```
 
+## Phân tích ảnh da và gợi ý mỹ phẩm
+
+Giao diện web cho phép đính kèm ảnh JPEG, PNG hoặc WebP. Người gửi phải xác nhận
+ảnh thuộc về mình hoặc người trong ảnh đã đồng ý. Backend mã hóa lại ảnh để loại
+EXIF, không ghi bytes/base64 vào LangGraph, SQLite hay lịch sử chat.
+
+Luồng xử lý tách biệt trách nhiệm:
+
+```text
+Ảnh → Google VLM quan sát bề mặt → chặn y khoa/dấu hiệu nguy cơ
+    → Google Search tìm hướng dẫn chung từ domain cho phép
+    → code lọc catalog → MISA viết câu trả lời Việt/Anh
+```
+
+VLM không có schema chẩn đoán bệnh. Nếu khách yêu cầu chẩn đoán/kê thuốc hoặc ảnh
+có dấu hiệu nguy cơ, hệ thống dừng trước bước tìm kiếm và không đề xuất sản phẩm.
+Nguồn web chỉ dùng để kiểm chứng nội bộ; URL và dòng nguồn bị loại khỏi phản hồi.
+
+Cấu hình:
+
+```dotenv
+GOOGLE_VLM_MODEL=gemini-3.5-flash-lite
+GOOGLE_SEARCH_MODEL=gemini-3.5-flash-lite
+SKIN_WEB_SEARCH_ENABLED=true
+SKIN_IMAGE_MAX_BYTES=8388608
+SKIN_VISION_MIN_CONFIDENCE=0.60
+SKIN_SEARCH_ALLOWED_DOMAINS=aad.org,nhs.uk,who.int,fda.gov,mayoclinic.org,pubmed.ncbi.nlm.nih.gov
+```
+
+Có thể gọi endpoint trực tiếp:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/skin-analysis \
+  -F session_id=<session-id> \
+  -F user_id=<user-id> \
+  -F message='Da dầu này phù hợp sản phẩm nào?' \
+  -F consent=true \
+  -F image=@skin.jpg
+```
+
+Nếu hồ sơ và câu hỏi chưa xác nhận loại da, endpoint chỉ hỏi thêm thông tin và chưa
+gọi Google Search. Giá, SKU, tồn kho, thành phần và công dụng sản phẩm luôn lấy từ
+`data/products.json`, không lấy từ kết quả web.
+
 ## Luồng graph
 
 ```text
@@ -86,7 +130,7 @@ Agent dùng model để nhận diện intent và trích entity, nhưng không đ
 Tin nhắn → intent/entity → catalog resolver → action/state machine → reply generator
 ```
 
-- `catalog.py` chuẩn hóa alias Việt/Anh/Trung/Hàn/Tây Ban Nha về SKU.
+- `catalog.py` chuẩn hóa alias tiếng Việt và tiếng Anh về SKU.
 - `skills/order/tools.py` kiểm tra lại entity của model bằng catalog.
 - `skills/order/node.py` xử lý giỏ hàng, tồn kho, địa chỉ và xác nhận đơn bằng Python.
 - `profile_memory.py` chỉ lưu dữ liệu khách nói rõ, kèm nguồn và thời điểm xác nhận.
@@ -113,8 +157,8 @@ uv run python scripts/run_acceptance.py --section 1 --fresh --timeout 90
 uv run python scripts/run_acceptance.py --limit 10 --fresh --timeout 90
 ```
 
-Mặc định runner áp dụng `data/acceptance_scope.json`: loại S2 và các chức năng S4
-chưa triển khai. Phạm vi hiện tại có 272 ca:
+Mặc định runner áp dụng `data/acceptance_scope.json`: loại S2, các chức năng S4
+chưa triển khai và ngôn ngữ ngoài tiếng Việt/Anh. Phạm vi hiện tại có 267 ca:
 
 ```bash
 uv run python scripts/run_acceptance.py \

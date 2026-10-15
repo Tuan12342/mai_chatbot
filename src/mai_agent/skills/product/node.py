@@ -93,7 +93,7 @@ def _recent_product_candidates(
 
 
 def _format_price(price_vnd: int, language: str) -> str:
-    separator = "." if language in {"vi", "es"} else ","
+    separator = "." if language == "vi" else ","
     return f"{price_vnd:,}".replace(",", separator)
 
 
@@ -118,30 +118,6 @@ SKIN_TYPE_TRANSLATIONS = {
         "da nhạy cảm": "sensitive skin",
         "da thường": "normal skin",
         "mọi loại da": "all skin types",
-    },
-    "zh": {
-        "da dầu": "油性皮肤",
-        "da hỗn hợp": "混合性皮肤",
-        "da khô": "干性皮肤",
-        "da nhạy cảm": "敏感性皮肤",
-        "da thường": "中性皮肤",
-        "mọi loại da": "所有肤质",
-    },
-    "ko": {
-        "da dầu": "지성 피부",
-        "da hỗn hợp": "복합성 피부",
-        "da khô": "건성 피부",
-        "da nhạy cảm": "민감성 피부",
-        "da thường": "중성 피부",
-        "mọi loại da": "모든 피부 타입",
-    },
-    "es": {
-        "da dầu": "piel grasa",
-        "da hỗn hợp": "piel mixta",
-        "da khô": "piel seca",
-        "da nhạy cảm": "piel sensible",
-        "da thường": "piel normal",
-        "mọi loại da": "todo tipo de piel",
     },
 }
 
@@ -174,30 +150,6 @@ def _localized_product_fact(product: dict[str, Any], fact: str, language: str) -
             "ingredients": f"The main ingredients of {name} ({sku}) are {ingredients}.",
             "usage": f"How to use {name} ({sku}): {usage}",
             "sunscreen": f"Yes. {name} ({sku}) has SPF 50+ PA++++ and costs {price} VND.",
-        }
-    elif language == "zh":
-        templates = {
-            "price": f"{name}（{sku}）的价格是 {price} 越南盾。",
-            "skin": f"{name}（{sku}）适合以下肤质：{skin_types}。",
-            "ingredients": f"{name}（{sku}）的主要成分是：{ingredients}。",
-            "usage": f"{name}（{sku}）的使用方法：{usage}",
-            "sunscreen": f"有。{name}（{sku}）是 SPF 50+ PA++++，价格为 {price} 越南盾。",
-        }
-    elif language == "ko":
-        templates = {
-            "price": f"{name}({sku})의 가격은 {price}동입니다.",
-            "skin": f"{name}({sku})는 다음 피부 타입에 적합합니다: {skin_types}.",
-            "ingredients": f"{name}({sku})의 주요 성분은 {ingredients}입니다.",
-            "usage": f"{name}({sku}) 사용법: {usage}",
-            "sunscreen": f"네. {name}({sku})는 SPF 50+ PA++++이며 가격은 {price}동입니다.",
-        }
-    elif language == "es":
-        templates = {
-            "price": f"{name} ({sku}) cuesta {price} VND.",
-            "skin": f"{name} ({sku}) es adecuado para: {skin_types}.",
-            "ingredients": f"Los ingredientes principales de {name} ({sku}) son {ingredients}.",
-            "usage": f"Modo de uso de {name} ({sku}): {usage}",
-            "sunscreen": f"Sí. {name} ({sku}) tiene SPF 50+ PA++++ y cuesta {price} VND.",
         }
     else:
         templates = {
@@ -237,17 +189,17 @@ def _direct_catalog_answer(
         return None
     product = products[0]
     if re.search(
-        r"giá|bao nhiêu|how much|price|cost|多少钱|价格|얼마|가격|cuánto|precio",
+        r"giá|bao nhiêu|how much|price|cost",
         normalized,
     ):
         fact = "price"
-    elif re.search(r"spf|防晒霜|선크림|protector solar", normalized):
+    elif re.search(r"spf|sunscreen", normalized):
         fact = "sunscreen"
-    elif re.search(r"thành phần|hoạt chất|ingredient|成分|성분|ingrediente", normalized):
+    elif re.search(r"thành phần|hoạt chất|ingredient", normalized):
         fact = "ingredients"
-    elif re.search(r"dùng|bước|đắp|use|apply|使用|사용|cómo se usa", normalized):
+    elif re.search(r"dùng|bước|đắp|use|apply", normalized):
         fact = "usage"
-    elif re.search(r"hợp|loại da|suitable|skin type|适合|피부|adecuado", normalized):
+    elif re.search(r"hợp|loại da|suitable|skin type", normalized):
         fact = "skin"
     else:
         return None
@@ -261,9 +213,6 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
     language_name = {
         "vi": "Vietnamese",
         "en": "English",
-        "zh": "Simplified Chinese",
-        "ko": "Korean",
-        "es": "Spanish",
     }.get(response_language, "Vietnamese")
     pending_product_reference = session.get("pending_product_reference")
     latest_text = next(

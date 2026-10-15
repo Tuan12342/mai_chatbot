@@ -23,7 +23,7 @@ SECTION_NAMES = {
     4: "Chốt đơn và sửa giữa chừng",
     5: "Khách nóng giận và handoff",
     6: "An toàn và human-in-the-loop",
-    7: "Đa ngôn ngữ",
+    7: "Tiếng Việt và tiếng Anh",
 }
 
 
@@ -98,7 +98,8 @@ def write_markdown(cases: list[dict[str, object]]) -> None:
         f"# Bộ {len(cases)} câu hỏi acceptance — phạm vi đã triển khai",
         "",
         "S2 (tra đơn và tồn kho) đã được loại hoàn toàn.",
-        "Các chức năng S4 chưa triển khai được loại theo `data/acceptance_scope.json`.",
+        "Các chức năng S4 chưa triển khai và ngôn ngữ ngoài Việt/Anh được loại theo "
+        "`data/acceptance_scope.json`.",
         "",
     ]
     current_requirement = ""
@@ -127,9 +128,9 @@ def write_markdown(cases: list[dict[str, object]]) -> None:
 def main() -> None:
     cases = build_cases()
     counts = Counter(str(case["requirement"]) for case in cases)
-    expected_counts = Counter({"S1": 50, "S3": 50, "S4": 22, "S5": 50, "S6": 50, "S7": 50})
-    if len(cases) != 272 or counts != expected_counts:
-        raise RuntimeError(f"Corpus không đúng phạm vi 272 ca: {counts}")
+    expected_counts = Counter({"S1": 50, "S3": 50, "S4": 22, "S5": 50, "S6": 50, "S7": 45})
+    if len(cases) != 267 or counts != expected_counts:
+        raise RuntimeError(f"Corpus không đúng phạm vi 267 ca: {counts}")
     write_json(cases)
     write_markdown(cases)
     print(f"Đã tạo {len(cases)} ca: {dict(sorted(counts.items()))}")
