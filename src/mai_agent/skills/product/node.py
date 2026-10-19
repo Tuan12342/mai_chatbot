@@ -2,9 +2,9 @@ import json
 import re
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from mai_agent.catalog import find_product, product_alias_candidates
+from mai_agent.catalog import find_product
 from mai_agent.llm import create_chat_model
 from mai_agent.prompts import SYSTEM_PROMPT
 from mai_agent.skills.product.tools import PRODUCT_TOOLS
@@ -51,7 +51,7 @@ def _recent_product_candidates(
         if not isinstance(message, ToolMessage):
             continue
         payload = _tool_payload(message)
-        if message.name in {"search_products", "recommend_products"} and isinstance(payload, list):
+        if message.name == "search_products" and isinstance(payload, list):
             for product in payload:
                 if isinstance(product, dict):
                     add_candidate(product.get("id"), product.get("name"))
@@ -69,9 +69,7 @@ def _recent_product_candidates(
     if response_text is None or len(candidates) <= 1:
         return candidates
 
-    # Tool searches may return a broad internal result set. Prefer SKUs explicitly
-    # surfaced in the final answer so follow-up purchases do not become falsely
-    # ambiguous. Product names are a fallback for responses that omit the SKU.
+
     mentioned_by_id = [
         candidate
         for candidate in candidates
@@ -92,163 +90,24 @@ def _recent_product_candidates(
     ]
 
 
-def _format_price(price_vnd: int, language: str) -> str:
-    separator = "." if language == "vi" else ","
-    return f"{price_vnd:,}".replace(",", separator)
-
-
-PRODUCT_DISPLAY_NAMES = {
-    "OA001": "OA Gentle Cleanser",
-    "OA002": "OA Purifying Gel",
-    "OA003": "OA Hydrating Toner",
-    "OA004": "OA Barrier Repair Serum",
-    "OA005": "OA Brightening Serum",
-    "OA006": "OA Ceramide Cream",
-    "OA007": "OA Oil-Free Gel Cream",
-    "OA008": "OA Daily UV Fluid SPF 50+ PA++++",
-    "OA009": "OA Soothing Mask",
-    "OA010": "OA Micellar Water",
-}
-
-SKIN_TYPE_TRANSLATIONS = {
-    "en": {
-        "da dầu": "oily skin",
-        "da hỗn hợp": "combination skin",
-        "da khô": "dry skin",
-        "da nhạy cảm": "sensitive skin",
-        "da thường": "normal skin",
-        "mọi loại da": "all skin types",
-    },
-}
-
-
-def _direct_catalog_products(text: str) -> list[dict[str, Any]]:
-    """Resolve explicit SKU first, then deterministic aliases."""
-    explicit_ids = re.findall(r"\bOA\d{3}\b", text, flags=re.IGNORECASE)
-    product_ids = [product_id.upper() for product_id in explicit_ids]
-    if not product_ids:
-        product_ids = product_alias_candidates(text)
-    return [
-        product
-        for product_id in dict.fromkeys(product_ids)
-        if (product := find_product(product_id)) is not None
-    ]
-
-
-def _localized_product_fact(product: dict[str, Any], fact: str, language: str) -> str:
-    sku = product["id"]
-    name = product["name"] if language == "vi" else PRODUCT_DISPLAY_NAMES.get(sku, product["name"])
-    price = _format_price(product["price_vnd"], language)
-    translations = SKIN_TYPE_TRANSLATIONS.get(language, {})
-    skin_types = ", ".join(translations.get(value, value) for value in product["skin_types"])
-    ingredients = ", ".join(product["ingredients"])
-    usage = product["usage"]
-    if language == "en":
-        templates = {
-            "price": f"{name} ({sku}) costs {price} VND.",
-            "skin": f"{name} ({sku}) is suitable for: {skin_types}.",
-            "ingredients": f"The main ingredients of {name} ({sku}) are {ingredients}.",
-            "usage": f"How to use {name} ({sku}): {usage}",
-            "sunscreen": f"Yes. {name} ({sku}) has SPF 50+ PA++++ and costs {price} VND.",
-        }
-    else:
-        templates = {
-            "price": f"{name} ({sku}) có giá {price}đ.",
-            "skin": f"{name} ({sku}) phù hợp với: {skin_types}.",
-            "ingredients": f"Thành phần chính của {name} ({sku}) là {ingredients}.",
-            "usage": f"Cách dùng {name} ({sku}): {usage}",
-            "sunscreen": f"Có ạ. {name} ({sku}) có SPF 50+ PA++++, giá {price}đ.",
-        }
-    return templates[fact]
-
-
-def _direct_catalog_answer(
-    text: str,
-    language: str,
-    intent: str,
-    customer: dict[str, Any],
-) -> tuple[str, list[dict[str, Any]]] | None:
-    """Answer simple catalog facts without an embedding or model round-trip."""
-    products = _direct_catalog_products(text)
-    normalized = text.casefold()
-
-    if intent == "recommendation" and len(products) > 1:
-        skin_type = customer.get("skin_type")
-        if "da dầu" in normalized:
-            skin_type = "da dầu"
-        matches = [
-            product
-            for product in products
-            if skin_type in product["skin_types"] or "mọi loại da" in product["skin_types"]
-        ]
-        if len(matches) == 1:
-            product = matches[0]
-            return _localized_product_fact(product, "skin", language), matches
-
-    if len(products) != 1:
-        return None
-    product = products[0]
-    if re.search(
-        r"giá|bao nhiêu|how much|price|cost",
-        normalized,
-    ):
-        fact = "price"
-    elif re.search(r"spf|sunscreen", normalized):
-        fact = "sunscreen"
-    elif re.search(r"thành phần|hoạt chất|ingredient", normalized):
-        fact = "ingredients"
-    elif re.search(r"dùng|bước|đắp|use|apply", normalized):
-        fact = "usage"
-    elif re.search(r"hợp|loại da|suitable|skin type", normalized):
-        fact = "skin"
-    else:
-        return None
-    return _localized_product_fact(product, fact, language), products
+def _product_candidates_from_ids(product_ids: list[str]) -> list[dict[str, str]]:
+    """Khôi phục ngữ cảnh sản phẩm ảnh bằng dữ liệu catalog, không để model đoán."""
+    candidates: list[dict[str, str]] = []
+    for product_id in product_ids:
+        product = find_product(product_id)
+        if product is not None:
+            candidates.append(
+                {"product_id": product["id"], "product_name": product["name"]}
+            )
+    return candidates
 
 
 def assistant_node(state: AgentState) -> dict[str, Any]:
     customer = state.get("customer", {})
     session = state.get("session", {})
     response_language = session.get("language_code", "vi")
-    language_name = {
-        "vi": "Vietnamese",
-        "en": "English",
-    }.get(response_language, "Vietnamese")
+    language_name = "English" if response_language == "en" else "Vietnamese"
     pending_product_reference = session.get("pending_product_reference")
-    latest_text = next(
-        (
-            str(message.content)
-            for message in reversed(state.get("messages", []))
-            if isinstance(message, HumanMessage)
-        ),
-        "",
-    )
-    direct_answer = _direct_catalog_answer(
-        latest_text,
-        response_language,
-        str(session.get("current_intent", "")),
-        customer,
-    )
-    if direct_answer is not None:
-        reply, matched_products = direct_answer
-        candidates = [
-            {"product_id": product["id"], "product_name": product["name"]}
-            for product in matched_products
-        ]
-        return {
-            "reply": reply,
-            "messages": [AIMessage(content=reply)],
-            "session": {"last_product_candidates": candidates},
-        }
-
-    catalog_matches = _direct_catalog_products(latest_text)
-    catalog_context = (
-        "Catalog resolver đã ánh xạ cách gọi của khách thành: "
-        + ", ".join(f"{product['id']} - {product['name']}" for product in catalog_matches)
-        + ". Phải truyền các SKU này vào công cụ; nếu có nhiều SKU thì không tự chọn."
-        if catalog_matches
-        else "Catalog resolver chưa có ánh xạ chắc chắn cho cách gọi trong câu hiện tại."
-    )
     pending_product_context = (
         f"Sản phẩm đang được chọn trong luồng đặt hàng: {pending_product_reference}. "
         "Khi khách nói 'sản phẩm này', 'loại này' hoặc cách gọi tương tự, dùng mã này "
@@ -256,13 +115,20 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         if pending_product_reference
         else "Không có sản phẩm nào đang chờ trong luồng đặt hàng."
     )
+    skin_product_ids = session.get("pending_skin_product_ids", [])
+    skin_followup_context = (
+        "Khách đang trả lời lời mời hướng dẫn chi tiết sau khi phân tích ảnh da. "
+        f"Các SKU vừa được gợi ý là: {', '.join(skin_product_ids)}. "
+        "Nếu khách đồng ý, dùng công cụ tra các SKU này rồi hướng dẫn một quy trình "
+        "ngắn, rõ thứ tự và cách dùng. Nếu khách từ chối, xác nhận ngắn gọn và không "
+        "gợi ý thêm. Không chẩn đoán tình trạng da từ ảnh."
+        if session.get("current_step") == "awaiting_skin_guidance_confirmation"
+        else "Không có lượt tư vấn ảnh nào đang chờ phản hồi."
+    )
     profile_context = (
         "Hồ sơ được hệ thống nạp cho đúng Zalo user hiện tại:\n"
         f"- Loại da: {customer.get('skin_type', 'chưa biết')}\n"
         f"- Thành phần cần loại trừ: {customer.get('excluded_ingredients', [])}\n"
-        f"- Vấn đề quan tâm: {customer.get('concerns', [])}\n"
-        f"- Dị ứng/nhạy cảm: {customer.get('allergies', []) + customer.get('sensitivities', [])}\n"
-        f"- Không gợi ý các SKU: {customer.get('disliked_product_ids', [])}\n"
         "Không hỏi hoặc tự suy đoán Zalo user ID."
     )
     model_with_tools = create_chat_model().bind_tools(PRODUCT_TOOLS)
@@ -274,18 +140,14 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             "trạng thái phiên đã có. Không dịch SKU, tên riêng sản phẩm, thương hiệu "
             "hoặc tên thành phần INCI trong kết quả công cụ.\n"
             f"{pending_product_context}\n"
-            f"{catalog_context}\n"
+            f"{skin_followup_context}\n"
             "Quy tắc sử dụng công cụ:\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
             "độ phù hợp hoặc so sánh sản phẩm.\n"
             "- Dùng search_products khi cần tìm theo mã, tên hoặc danh mục.\n"
-            "- Khi khách cần gợi ý/lựa chọn sản phẩm, bắt buộc dùng recommend_products "
-            "và truyền đầy đủ loại da, vấn đề quan tâm, dị ứng/nhạy cảm, thành phần "
-            "loại trừ, SKU không thích từ hồ sơ. "
-            "Không đề xuất SKU nằm trong danh sách không thích.\n"
             "- Dùng check_product_stock khi hỏi tồn kho hoặc số lượng có thể mua.\n"
-            "  Khi thiếu hàng, truyền loại da, dị ứng/nhạy cảm, thành phần cần loại trừ "
-            "từ hồ sơ trên cùng danh sách SKU không thích để nhận gợi ý thay thế.\n"
+            "  Khi thiếu hàng, truyền loại da và thành phần cần loại trừ từ hồ sơ trên "
+            "để nhận gợi ý thay thế.\n"
             f"{profile_context}\n"
             "- Khi giới thiệu, mô tả hoặc đề xuất sản phẩm trong câu trả lời cuối, luôn "
             "ghi kèm mã SKU lấy từ kết quả công cụ để duy trì đúng ngữ cảnh hội thoại.\n"
@@ -303,5 +165,19 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
     # "mua 2 lo" to the single product that was just discussed.
     if not response.tool_calls:
         candidates = _recent_product_candidates(messages, reply)
-        update["session"] = {"last_product_candidates": candidates}
+        if not candidates and session.get("current_step") == "awaiting_skin_guidance_confirmation":
+            candidates = _product_candidates_from_ids(skin_product_ids)
+        session_update: dict[str, Any] = {}
+        # Không xóa ngữ cảnh cũ chỉ vì lượt hiện tại không gọi tool sản phẩm.
+        # Điều này cho phép khách chuyển thẳng sang đặt hàng ở lượt kế tiếp.
+        if candidates:
+            session_update["last_product_candidates"] = candidates
+        if session.get("current_step") == "awaiting_skin_guidance_confirmation":
+            session_update.update(
+                {
+                    "current_step": "idle",
+                    "pending_skin_product_ids": [],
+                }
+            )
+        update["session"] = session_update
     return update

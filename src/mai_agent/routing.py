@@ -1,13 +1,19 @@
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
-from underthesea import lang_detect
 
 from mai_agent.customer_store import find_customer_by_zalo_id
 from mai_agent.llm import invoke_tool
 from mai_agent.reply_generator import generate_reply
-from mai_agent.state import AgentState, ConversationStep, Intent, LanguageCode, SessionState
+from mai_agent.state import (
+    AgentState,
+    ConversationStep,
+    Intent,
+    LanguageCode,
+    LanguageSignal,
+    SessionState,
+)
 
 
 def latest_user_text(state: AgentState) -> str:
@@ -18,6 +24,77 @@ def latest_user_text(state: AgentState) -> str:
     return ""
 
 
+@tool
+def explicit_language_request(language: Literal["vi", "en"]) -> str:
+    """Người dùng trực tiếp yêu cầu bot trả lời bằng tiếng Việt hoặc tiếng Anh."""
+    return language
+
+
+@tool
+def clear_message_language(language: Literal["vi", "en"]) -> str:
+    """Không có yêu cầu đổi tiếng, nhưng nội dung đủ rõ là tiếng Việt hoặc tiếng Anh."""
+    return language
+
+
+@tool
+def ambiguous_language_signal() -> str:
+    """Tin nhắn quá ngắn, dùng chung nhiều ngôn ngữ, là mã/số hoặc không phải Việt/Anh."""
+    return "ambiguous"
+
+
+LANGUAGE_SIGNAL_TOOLS = [
+    explicit_language_request,
+    clear_message_language,
+    ambiguous_language_signal,
+]
+
+
+def _interpret_language_signal(
+    text: str,
+    current_language: LanguageCode,
+) -> tuple[LanguageSignal, LanguageCode | None]:
+    """Phân loại lý do đổi/giữ ngôn ngữ bằng tool-calling của model."""
+    call = invoke_tool(
+        LANGUAGE_SIGNAL_TOOLS,
+        [
+            SystemMessage(
+                content=(
+                    "Phân loại tín hiệu ngôn ngữ của tin nhắn và bắt buộc gọi đúng một "
+                    "tool. Chỉ hỗ trợ vi và en. Ưu tiên cao nhất là "
+                    "explicit_language_request khi người dùng trực tiếp yêu cầu bot trả "
+                    "lời, chuyển hoặc tiếp tục bằng một ngôn ngữ; tham số language là "
+                    "ngôn ngữ họ yêu cầu, không phải ngôn ngữ câu yêu cầu. Nếu không có "
+                    "yêu cầu trực tiếp và câu đủ rõ, gọi clear_message_language theo ngôn "
+                    "ngữ nội dung. Gọi ambiguous_language_signal cho lời xác nhận hoặc "
+                    "cảm thán ngắn dùng chung như ok/okay, mã SKU, con số, ký hiệu, nội "
+                    "dung quá ngắn để chắc chắn, hoặc ngôn ngữ ngoài vi/en. Với tín hiệu "
+                    "mập mờ phải giữ ngôn ngữ hiện tại. Không tự trả lời người dùng."
+                )
+            ),
+            HumanMessage(
+                content=(
+                    f"Ngôn ngữ hiện tại: {current_language}\n"
+                    f"Tin nhắn mới nhất: {text}"
+                )
+            ),
+        ],
+        error_message="Model không phân loại được tín hiệu ngôn ngữ.",
+    )
+    if call["name"] == "ambiguous_language_signal":
+        return "ambiguous", None
+    if call["name"] == "explicit_language_request":
+        signal: LanguageSignal = "explicit_request"
+    elif call["name"] == "clear_message_language":
+        signal = "clear_language"
+    else:
+        raise RuntimeError(f"Model gọi tool ngôn ngữ không được hỗ trợ: {call['name']}")
+
+    language = call["args"].get("language")
+    if language not in {"vi", "en"}:
+        raise RuntimeError("Model trả về ngôn ngữ không được hỗ trợ.")
+    return signal, language
+
+
 def detect_language_node(state: AgentState) -> dict[str, Any]:
     session = state.get("session", {})
     customer = state.get("customer", {})
@@ -26,25 +103,22 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
         preferred_language = customer.get("preferred_language")
         current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
 
-    text = latest_user_text(state).strip()
-    normalized_text = text.casefold().strip(" .,!?")
-    if normalized_text in {"hi", "hello", "thanks", "thank you", "yes", "no"}:
-        return {"session": {"language_code": "en"}}
-    letters = [character for character in text if character.isalpha()]
-    is_product_code = any(character.isdigit() for character in text) and len(letters) <= 5
-    if not text or len(letters) <= 2 or is_product_code:
-        return {"session": {"language_code": current_language}}
-
-    detected_language = lang_detect(text)
-    language: LanguageCode = (
-        detected_language if detected_language in {"vi", "en"} else current_language
+    signal, signaled_language = _interpret_language_signal(
+        latest_user_text(state).strip(),
+        current_language,
     )
-    return {"session": {"language_code": language}}
+    language: LanguageCode = signaled_language or current_language
+    return {
+        "session": {
+            "language_code": language,
+            "language_signal": signal,
+        }
+    }
 
 
 @tool
 def route_order() -> str:
-    """Khách muốn mua, đặt, sửa hoặc xác nhận một đơn hàng mới."""
+    """Khách muốn lấy/mua sản phẩm, kể cả đã chọn sản phẩm nhưng chưa nói số lượng."""
     return "order"
 
 
@@ -110,6 +184,10 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
                     "hoặc khiếu nại về shop. Lời chào và câu trả lời ngắn như "
                     "'có', 'không', 'đúng', số lượng, địa chỉ hay số điện "
                     "thoại là route_in_scope khi phù hợp bước hội thoại hiện tại. "
+                    "Đặc biệt, khi bước hiện tại là "
+                    "awaiting_recommendation_clarification, phải hiểu câu trả lời "
+                    "ngắn theo yêu cầu tư vấn đang chờ và chọn route_in_scope, trừ "
+                    "khi khách chuyển rõ sang chủ đề không liên quan. "
                     "route_out_of_scope cho tin tức, thời sự, chính trị, thể thao, "
                     "thời tiết, chứng khoán, tiền mã hóa, lập trình, toán học, "
                     "lịch sử, kiến thức phổ thông hoặc yêu cầu khác không liên "
@@ -144,6 +222,10 @@ def _interpret_intent(
                     "không tự trả lời khách. Ưu tiên route_order nếu khách yêu cầu "
                     "lấy, mua hoặc chốt số lượng cụ thể, kể cả khi dùng 'loại này', "
                     "'sản phẩm này', 'loại 1', 'loại 2' hoặc kèm mã SKU. "
+                    "Khi ngữ cảnh có recently_recommended_products và khách chọn một "
+                    "sản phẩm cụ thể để nhận/lấy, phải chọn route_order dù khách chưa "
+                    "nói số lượng; order flow sẽ hỏi số lượng ở bước sau. Không phân "
+                    "loại trường hợp đã chọn mua này thành route_product_question. "
                     "Chọn route_order_lookup khi khách muốn tra trạng thái, thanh toán, "
                     "giao hàng hoặc thông tin của đơn đã tạo trước đó. Nếu bước hiện "
                     "tại là verifying_order_lookup và khách đang cung cấp mã đơn hoặc "
@@ -151,6 +233,9 @@ def _interpret_intent(
                     "Nếu khách chỉ hỏi thông tin thì chọn route_product_question. "
                     "Nếu khách cần lựa chọn sản phẩm theo da hoặc cung cấp thêm đặc "
                     "điểm da để tiếp tục tư vấn thì chọn route_recommendation. "
+                    "Nếu bước hiện tại là awaiting_recommendation_clarification, hãy "
+                    "dùng dữ liệu đang chờ để hiểu câu trả lời ngắn theo ngữ cảnh và "
+                    "chọn route_recommendation, trừ khi khách chuyển rõ sang ý định khác. "
                     "Nếu đơn đang nhập dở, hãy hiểu tin nhắn dựa trên bước hiện tại "
                     "và dữ liệu đang chờ. Chọn route_order khi khách đang cung cấp, "
                     "xác nhận, sửa, từ chối hoặc hủy thông tin của đơn. Nếu khách đổi "
@@ -162,7 +247,7 @@ def _interpret_intent(
             HumanMessage(
                 content=(
                     f"Bước hội thoại hiện tại: {current_step}\n"
-                    f"Dữ liệu đơn đang chờ: {pending_context}\n"
+                    f"Ngữ cảnh hội thoại và đơn đang chờ: {pending_context}\n"
                     f"Tin nhắn khách: {text}"
                 )
             ),
@@ -183,11 +268,16 @@ def _interpret_intent(
 
 
 def _pending_context(session: dict[str, Any]) -> dict[str, Any]:
-    return {
+    context = {
         key: value
         for key, value in session.items()
         if key.startswith("pending_") and value not in (None, "", [])
     }
+    if session.get("last_product_candidates"):
+        context["recently_recommended_products"] = session["last_product_candidates"]
+    if session.get("cart"):
+        context["current_cart"] = session["cart"]
+    return context
 
 
 def classify_intent_node(state: AgentState) -> dict[str, Any]:

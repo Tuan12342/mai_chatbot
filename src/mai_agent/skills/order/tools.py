@@ -24,7 +24,7 @@ def normalize_order_items(
     """Chuẩn hóa entity model trích xuất trước khi chạy nghiệp vụ giỏ hàng.
 
     SKU trong catalog luôn thắng cách gọi tự do của model. Khi câu đặt hàng nhắc
-    rõ sản phẩm nhưng không nói số lượng, chính sách của shop mặc định một sản phẩm.
+    rõ sản phẩm nhưng không nói số lượng, giữ ``quantity=None`` để hỏi lại khách.
     """
     items = [dict(item) for item in extracted_items]
     mentions = extract_product_mentions(text)
@@ -56,10 +56,6 @@ def normalize_order_items(
 
     for product_id in remaining_mentions[len(missing_reference_items) :]:
         items.append({"product_reference": product_id, "quantity": None})
-
-    for item in items:
-        if item.get("product_reference") and item.get("quantity") is None:
-            item["quantity"] = 1
 
     return items
 

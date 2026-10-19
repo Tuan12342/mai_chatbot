@@ -17,31 +17,34 @@ MAI_AGENT_WEB_PORT=8765 uv run mai-agent-web
 
 ## Phân tích ảnh da và gợi ý mỹ phẩm
 
-Giao diện web cho phép đính kèm ảnh JPEG, PNG hoặc WebP. Người gửi phải xác nhận
-ảnh thuộc về mình hoặc người trong ảnh đã đồng ý. Backend mã hóa lại ảnh để loại
-EXIF, không ghi bytes/base64 vào LangGraph, SQLite hay lịch sử chat.
+Giao diện web cho phép đính kèm ảnh JPEG, PNG hoặc WebP, xem ảnh ngay trong bong
+bóng chat và gửi phân tích trực tiếp. Có thể gửi ảnh mà không cần nhập câu hỏi;
+giao diện sẽ dùng yêu cầu phân tích mặc định. Backend mã hóa lại ảnh để loại EXIF,
+không ghi bytes/base64 vào LangGraph, SQLite hay lịch sử chat.
 
 Luồng xử lý tách biệt trách nhiệm:
 
 ```text
 Ảnh → Google VLM quan sát bề mặt → chặn y khoa/dấu hiệu nguy cơ
-    → Google Search tìm hướng dẫn chung từ domain cho phép
-    → code lọc catalog → MISA viết câu trả lời Việt/Anh
+    → code lọc ứng viên bắt buộc → MISA chọn SKU từ kho tri thức cục bộ
+    → code xác minh SKU → MISA viết câu trả lời Việt/Anh
 ```
 
 VLM không có schema chẩn đoán bệnh. Nếu khách yêu cầu chẩn đoán/kê thuốc hoặc ảnh
-có dấu hiệu nguy cơ, hệ thống dừng trước bước tìm kiếm và không đề xuất sản phẩm.
-Nguồn web chỉ dùng để kiểm chứng nội bộ; URL và dòng nguồn bị loại khỏi phản hồi.
+có dấu hiệu nguy cơ, hệ thống dừng trước bước truy xuất và không đề xuất sản phẩm.
+Luồng ảnh không gọi Google Search hoặc Google Embedding. Mỗi SKU có knowledge record
+trong `data/product_knowledge.json`, gồm vai trò routine, lý do lựa chọn và lưu ý an
+toàn. Không còn công thức điểm hoặc ngưỡng match. Code lọc tồn kho, loại da được nói
+trong request, thành phần loại trừ và care mode; MISA chỉ được chọn SKU trong danh sách
+ứng viên này. Giá, tồn kho và thông tin catalog vẫn được kiểm tra từ `data/products.json`.
 
 Cấu hình:
 
 ```dotenv
 GOOGLE_VLM_MODEL=gemini-3.5-flash-lite
-GOOGLE_SEARCH_MODEL=gemini-3.5-flash-lite
-SKIN_WEB_SEARCH_ENABLED=true
+SKIN_RECOMMENDATION_MAX_PRODUCTS=4
 SKIN_IMAGE_MAX_BYTES=8388608
 SKIN_VISION_MIN_CONFIDENCE=0.60
-SKIN_SEARCH_ALLOWED_DOMAINS=aad.org,nhs.uk,who.int,fda.gov,mayoclinic.org,pubmed.ncbi.nlm.nih.gov
 ```
 
 Có thể gọi endpoint trực tiếp:
@@ -51,13 +54,12 @@ curl -X POST http://127.0.0.1:8000/api/skin-analysis \
   -F session_id=<session-id> \
   -F user_id=<user-id> \
   -F message='Da dầu này phù hợp sản phẩm nào?' \
-  -F consent=true \
   -F image=@skin.jpg
 ```
 
-Nếu hồ sơ và câu hỏi chưa xác nhận loại da, endpoint chỉ hỏi thêm thông tin và chưa
-gọi Google Search. Giá, SKU, tồn kho, thành phần và công dụng sản phẩm luôn lấy từ
-`data/products.json`, không lấy từ kết quả web.
+Tư vấn ảnh không dùng hồ sơ da lịch sử. Nếu câu hỏi hiện tại không nói loại da, hệ thống
+để MISA suy luận từ đặc điểm bề mặt hiện tại và kho tri thức, đồng thời phải nói rõ chưa
+xác nhận loại da. Kết quả chọn được code xác minh lại trước khi tạo câu trả lời cuối.
 
 ## Luồng graph
 

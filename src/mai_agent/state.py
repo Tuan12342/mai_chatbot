@@ -9,6 +9,12 @@ LanguageCode = Literal[
     "unknown",
 ]
 
+LanguageSignal = Literal[
+    "explicit_request",
+    "clear_language",
+    "ambiguous",
+]
+
 Intent = Literal[
     "product_question",
     "recommendation",
@@ -19,6 +25,8 @@ Intent = Literal[
 
 ConversationStep = Literal[
     "idle",
+    "awaiting_skin_guidance_confirmation",
+    "awaiting_recommendation_clarification",
     "selecting_product",
     "collecting_quantity",
     "collecting_multi_quantities",
@@ -89,10 +97,13 @@ class Address(TypedDict, total=False):
 
 class SessionState(TypedDict, total=False):
     language_code: LanguageCode
+    language_signal: LanguageSignal
     session_id: Required[str]
     current_intent: Intent
     current_step: ConversationStep
     cart: list[CartItem]
+    pending_skin_product_ids: list[str]
+    pending_recommendation: dict[str, Any] | None
     pending_product_id: str | None
     pending_product_reference: str | None
     pending_product_candidates: list[ProductCandidate]
@@ -109,6 +120,8 @@ class SessionState(TypedDict, total=False):
     pending_order_lookup_attempts: int
     pending_profile_update: dict[str, Any] | None
     pending_profile_reason: str | None
+    pending_resume_intent: Intent | None
+    pending_resume_request: str | None
     handoff_status: HandoffStatus
     handoff_reason: str | None
     handoff_trigger: str | None
@@ -178,3 +191,4 @@ class AgentState(TypedDict, total=False):
     handoff_action: HandoffAction
     policy_handled: bool
     profile_memory_handled: bool
+    profile_memory_resume_intent: Intent | None

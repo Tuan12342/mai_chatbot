@@ -127,67 +127,6 @@ def check_product_stock(
 
 
 @tool
-def recommend_products(
-    skin_type: str | None = None,
-    concerns: list[str] | None = None,
-    excluded_ingredients: list[str] | None = None,
-    sensitivities: list[str] | None = None,
-    allergies: list[str] | None = None,
-    disliked_product_ids: list[str] | None = None,
-    limit: int = 5,
-) -> list[dict[str, Any]]:
-    """Gợi ý sản phẩm còn hàng theo hồ sơ da và loại bỏ sản phẩm khách không thích."""
-    normalized_skin_type = (skin_type or "").strip().casefold()
-    excluded = _avoid_ingredient_terms(excluded_ingredients, sensitivities, allergies)
-    disliked = {product_id.strip().upper() for product_id in disliked_product_ids or []}
-    concern_terms = {
-        "mụn": ("salicylic", "zinc", "lỗ chân lông", "dầu thừa"),
-        "thâm": ("niacinamide", "arbutin", "đều màu", "vết thâm"),
-        "nám": ("niacinamide", "arbutin", "đều màu", "chống nắng", "uva", "uvb"),
-        "lão hóa": ("chống nắng", "uva", "uvb", "cấp ẩm", "hyaluronic"),
-        "khô": ("cấp ẩm", "khóa ẩm", "ceramide", "hyaluronic", "squalane"),
-    }
-    requested_concerns = [str(concern).strip().casefold() for concern in concerns or []]
-    ranked_matches: list[tuple[int, dict[str, Any]]] = []
-    for product in load_products():
-        supported = {item.casefold() for item in product["skin_types"]}
-        ingredients = {item.casefold() for item in product["ingredients"]}
-        if product["stock"] <= 0 or product["id"].upper() in disliked:
-            continue
-        if (
-            normalized_skin_type
-            and normalized_skin_type not in supported
-            and "mọi loại da" not in supported
-        ):
-            continue
-        if any(blocked in ingredient for blocked in excluded for ingredient in ingredients):
-            continue
-        searchable = " ".join([*product["ingredients"], *product["benefits"]]).casefold()
-        score = sum(
-            term in searchable
-            for concern in requested_concerns
-            for term in concern_terms.get(concern, (concern,))
-        )
-        ranked_matches.append(
-            (
-                score,
-                {
-                    "id": product["id"],
-                    "name": product["name"],
-                    "category": product["category"],
-                    "skin_types": product["skin_types"],
-                    "ingredients": product["ingredients"],
-                    "benefits": product["benefits"],
-                    "price_vnd": product["price_vnd"],
-                    "stock": product["stock"],
-                },
-            )
-        )
-    ranked_matches.sort(key=lambda item: (-item[0], -item[1]["stock"]))
-    return [product for _, product in ranked_matches[: max(1, min(limit, 10))]]
-
-
-@tool
 def search_product_knowledge(
     query: str,
     product_references: list[str] | None = None,
@@ -236,7 +175,6 @@ def search_product_knowledge(
 
 PRODUCT_TOOLS = [
     search_products,
-    recommend_products,
     search_product_knowledge,
     check_product_stock,
 ]

@@ -1,0 +1,212 @@
+[
+  {
+    "product_id": "OA001",
+    "routine_role": "Làm sạch dịu nhẹ",
+    "routine_role_en": "Gentle cleansing",
+    "allowed_care_modes": ["standard", "medical_review"],
+    "why": [
+      "Glycerin và Panthenol hỗ trợ duy trì độ ẩm trong bước làm sạch.",
+      "Chiết xuất yến mạch phù hợp khi cần ưu tiên cảm giác làm sạch dịu nhẹ."
+    ],
+    "why_en": [
+      "Glycerin and Panthenol help maintain moisture during cleansing.",
+      "Oat extract suits routines that prioritize gentle cleansing."
+    ],
+    "cautions": [
+      "Không dùng kết quả quan sát ảnh để khẳng định sản phẩm điều trị đỏ da hoặc bệnh da.",
+      "Trong care mode cần khám, chỉ dùng trên vùng da còn nguyên vẹn và ngừng dùng nếu châm chích hoặc đỏ tăng."
+    ],
+    "cautions_en": [
+      "Do not use image observations to claim treatment of redness or skin disease.",
+      "When medical review is advised, use only on intact skin and stop if stinging or redness increases."
+    ]
+  },
+  {
+    "product_id": "OA002",
+    "routine_role": "Làm sạch dầu thừa",
+    "routine_role_en": "Cleansing excess oil",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Zinc PCA và Salicylic Acid 0.5% phù hợp hơn khi ảnh cho thấy dầu thừa hoặc nhiều nốt nhìn thấy.",
+      "Niacinamide bổ sung vai trò chăm sóc cho routine của da có xu hướng bóng dầu."
+    ],
+    "why_en": [
+      "Zinc PCA and Salicylic Acid 0.5% are more suitable when visible excess oil or multiple spots are observed.",
+      "Niacinamide supports routines for skin that tends to look oily."
+    ],
+    "cautions": [
+      "Không ưu tiên khi ảnh cho thấy khô hoặc đỏ rõ.",
+      "Bắt đầu với tần suất thấp và ngừng dùng nếu xuất hiện kích ứng."
+    ],
+    "cautions_en": [
+      "Do not prioritize it when noticeable dryness or redness is visible.",
+      "Start at a low frequency and stop if irritation occurs."
+    ]
+  },
+  {
+    "product_id": "OA003",
+    "routine_role": "Cấp ẩm và làm dịu sau làm sạch",
+    "routine_role_en": "Hydrating and soothing after cleansing",
+    "allowed_care_modes": ["standard", "medical_review"],
+    "why": [
+      "Hyaluronic Acid và Beta-Glucan hỗ trợ bổ sung độ ẩm.",
+      "Allantoin phù hợp khi routine cần ưu tiên làm dịu."
+    ],
+    "why_en": [
+      "Hyaluronic Acid and Beta-Glucan help replenish moisture.",
+      "Allantoin suits routines that prioritize soothing care."
+    ],
+    "cautions": [
+      "Đây là bước hỗ trợ chăm sóc, không thay thế đánh giá y khoa khi có dấu hiệu cảnh báo.",
+      "Trong care mode cần khám, chỉ dùng trên vùng da còn nguyên vẹn và ngừng dùng nếu châm chích hoặc đỏ tăng."
+    ],
+    "cautions_en": [
+      "This is supportive skincare and does not replace medical assessment when warning signs are present.",
+      "When medical review is advised, use only on intact skin and stop if stinging or redness increases."
+    ]
+  },
+  {
+    "product_id": "OA004",
+    "routine_role": "Hỗ trợ hàng rào da",
+    "routine_role_en": "Supporting the skin barrier",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Ceramide NP, Panthenol 5% và Squalane phù hợp với routine ưu tiên hàng rào da.",
+      "Công dụng catalog là hỗ trợ phục hồi hàng rào da và giảm cảm giác khô căng."
+    ],
+    "why_en": [
+      "Ceramide NP, Panthenol 5%, and Squalane suit routines focused on the skin barrier.",
+      "The catalog states that it supports the skin barrier and helps reduce feelings of dryness and tightness."
+    ],
+    "cautions": [
+      "Không mô tả sản phẩm như thuốc hoặc cam kết chữa khỏi tình trạng da."
+    ],
+    "cautions_en": [
+      "Do not describe the product as medicine or promise to cure a skin condition."
+    ]
+  },
+  {
+    "product_id": "OA005",
+    "routine_role": "Chăm sóc vẻ ngoài vết thâm và độ đều màu",
+    "routine_role_en": "Caring for the appearance of dark spots and uneven tone",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Niacinamide 10% và Alpha Arbutin 2% phù hợp khi mục tiêu là cải thiện vẻ ngoài vết thâm và độ đều màu.",
+      "Chỉ ưu tiên khi ảnh không cho thấy đỏ rõ hoặc dấu hiệu vượt phạm vi mỹ phẩm."
+    ],
+    "why_en": [
+      "Niacinamide 10% and Alpha Arbutin 2% suit goals related to the appearance of dark spots and uneven tone.",
+      "Prioritize it only when there is no noticeable redness or sign beyond cosmetic care."
+    ],
+    "cautions": [
+      "Thử trên vùng nhỏ trước vì công thức có nồng độ hoạt chất được công bố trong catalog.",
+      "Không gọi các nốt nhìn thấy trong ảnh là mụn bệnh lý."
+    ],
+    "cautions_en": [
+      "Patch test first because the catalog lists active ingredients at stated concentrations.",
+      "Do not label visible spots as a medical acne condition."
+    ]
+  },
+  {
+    "product_id": "OA006",
+    "routine_role": "Dưỡng ẩm và khóa ẩm",
+    "routine_role_en": "Moisturizing and sealing in moisture",
+    "allowed_care_modes": ["standard", "medical_review"],
+    "why": [
+      "Ceramide Complex, Cholesterol và Fatty Acids phù hợp với routine cần khóa ẩm và hỗ trợ hàng rào bảo vệ da.",
+      "Ưu tiên cao hơn khi ảnh cho thấy khô rõ và người dùng hiện tại xác nhận loại da phù hợp."
+    ],
+    "why_en": [
+      "Ceramide Complex, Cholesterol, and Fatty Acids suit routines that need moisture retention and barrier support.",
+      "Give it higher priority when noticeable dryness is observed and the current user confirms a compatible skin type."
+    ],
+    "cautions": [
+      "Không tự suy luận loại da chỉ từ ảnh để khẳng định sản phẩm chắc chắn phù hợp.",
+      "Trong care mode cần khám, chỉ dùng một lớp mỏng trên vùng da còn nguyên vẹn và ngừng dùng nếu khó chịu tăng."
+    ],
+    "cautions_en": [
+      "Do not infer skin type from an image alone to claim that the product is definitely suitable.",
+      "When medical review is advised, apply only a thin layer on intact skin and stop if discomfort increases."
+    ]
+  },
+  {
+    "product_id": "OA007",
+    "routine_role": "Cấp ẩm nhẹ",
+    "routine_role_en": "Lightweight hydration",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Hyaluronic Acid hỗ trợ cấp ẩm trong nền gel cream nhẹ.",
+      "Công dụng catalog là cấp ẩm nhẹ và hạn chế cảm giác nhờn."
+    ],
+    "why_en": [
+      "Hyaluronic Acid supports hydration in a lightweight gel-cream base.",
+      "The catalog describes lightweight hydration with less greasy feel."
+    ],
+    "cautions": [
+      "Không mặc định chọn sản phẩm chỉ vì hồ sơ cũ ghi da dầu hoặc da hỗn hợp."
+    ],
+    "cautions_en": [
+      "Do not select it by default solely because an old profile states oily or combination skin."
+    ]
+  },
+  {
+    "product_id": "OA008",
+    "routine_role": "Chống nắng ban ngày",
+    "routine_role_en": "Daytime sun protection",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Catalog công bố SPF 50+ PA++++ và công dụng bảo vệ da trước UVA, UVB.",
+      "Đây là bước nền tảng trong routine ban ngày, không phải sản phẩm điều trị."
+    ],
+    "why_en": [
+      "The catalog states SPF 50+ PA++++ and protection against UVA and UVB.",
+      "This is a foundational daytime routine step, not a treatment product."
+    ],
+    "cautions": [
+      "Thoa trước khi ra nắng 15 phút và thoa lại khi cần theo hướng dẫn catalog."
+    ],
+    "cautions_en": [
+      "Apply 15 minutes before sun exposure and reapply as needed according to the catalog instructions."
+    ]
+  },
+  {
+    "product_id": "OA009",
+    "routine_role": "Bổ sung độ ẩm và làm dịu",
+    "routine_role_en": "Additional hydration and soothing care",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Centella Asiatica, Madecassoside và Allantoin phù hợp với bước chăm sóc bổ sung khi cần ưu tiên làm dịu.",
+      "Sản phẩm là mặt nạ dùng 10-15 phút, không thay thế kem dưỡng hoặc chăm sóc y khoa."
+    ],
+    "why_en": [
+      "Centella Asiatica, Madecassoside, and Allantoin suit an additional step focused on soothing care.",
+      "This is a 10-15 minute mask and does not replace moisturizer or medical care."
+    ],
+    "cautions": [
+      "Không đề xuất nếu ảnh có vết thương, phồng rộp, sưng hoặc dấu hiệu cảnh báo khác."
+    ],
+    "cautions_en": [
+      "Do not recommend it when wounds, blistering, swelling, or other warning signs are visible."
+    ]
+  },
+  {
+    "product_id": "OA010",
+    "routine_role": "Tẩy trang và làm sạch bụi bẩn",
+    "routine_role_en": "Removing makeup and surface debris",
+    "allowed_care_modes": ["standard"],
+    "why": [
+      "Micellar Technology phục vụ bước loại bỏ trang điểm nhẹ và bụi bẩn theo catalog.",
+      "Chỉ nên đưa vào routine khi người dùng có nhu cầu tẩy trang; ảnh không thể xác nhận nhu cầu này."
+    ],
+    "why_en": [
+      "Micellar Technology supports the removal of light makeup and surface debris according to the catalog.",
+      "Include it only when makeup removal is needed; an image cannot confirm that need."
+    ],
+    "cautions": [
+      "Không ưu tiên chỉ dựa vào đặc điểm bề mặt trong ảnh."
+    ],
+    "cautions_en": [
+      "Do not prioritize it based only on visible surface characteristics."
+    ]
+  }
+]

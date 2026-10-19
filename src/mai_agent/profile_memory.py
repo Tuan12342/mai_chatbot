@@ -42,7 +42,24 @@ def no_profile_information() -> str:
     return "no_profile_information"
 
 
-PROFILE_EXTRACTION_TOOLS = [remember_profile_information, no_profile_information]
+@tool
+def third_party_profile_context() -> str:
+    """Thông tin da hoặc nhu cầu trong tin nhắn thuộc về một người khác, không phải khách."""
+    return "third_party_profile_context"
+
+
+@tool
+def consultation_context_only() -> str:
+    """Loại da/vấn đề chỉ là điều kiện tìm sản phẩm, không phải cập nhật hồ sơ cá nhân."""
+    return "consultation_context_only"
+
+
+PROFILE_EXTRACTION_TOOLS = [
+    remember_profile_information,
+    no_profile_information,
+    third_party_profile_context,
+    consultation_context_only,
+]
 
 
 def _normalize_text(text: str) -> str:
@@ -161,6 +178,42 @@ def _with_profile_metadata(
     return {**updates, "profile_metadata": metadata}
 
 
+def _recommendation_resume_update(state: AgentState) -> dict[str, Any]:
+    """Giữ yêu cầu gốc khi profile confirmation tạm ngắt luồng tư vấn."""
+    if state.get("session", {}).get("current_intent") != "recommendation":
+        return {}
+    request = latest_user_text(state).strip()
+    if not request:
+        return {}
+    return {
+        "pending_resume_intent": "recommendation",
+        "pending_resume_request": request,
+    }
+
+
+def _resume_recommendation_after_confirmation(
+    state: AgentState,
+    customer: dict[str, Any],
+    cleared_pending: dict[str, Any],
+) -> dict[str, Any] | None:
+    session = state.get("session", {})
+    request = str(session.get("pending_resume_request", "")).strip()
+    if session.get("pending_resume_intent") != "recommendation" or not request:
+        return None
+    return {
+        "customer": customer,
+        "profile_memory_handled": True,
+        "profile_memory_resume_intent": "recommendation",
+        "session": {
+            **cleared_pending,
+            "current_intent": "recommendation",
+            "pending_resume_intent": None,
+            "pending_resume_request": None,
+            "pending_recommendation": {"request": request},
+        },
+    }
+
+
 def profile_confirmation_node(state: AgentState) -> dict[str, Any]:
     """Xử lý câu trả lời cho cập nhật đang chờ trước bước phân loại intent."""
     session = state.get("session", {})
@@ -184,6 +237,12 @@ def profile_confirmation_node(state: AgentState) -> dict[str, Any]:
             source=source,
         )
         customer = update_customer_profile(user_id, confirmed_updates)
+        if resumed := _resume_recommendation_after_confirmation(
+            state,
+            customer,
+            cleared_pending,
+        ):
+            return resumed
         reply = (
             "I've updated your skin profile and will use it for future consultations."
             if language == "en"
@@ -205,6 +264,12 @@ def profile_confirmation_node(state: AgentState) -> dict[str, Any]:
                     "excluded_ingredients": [],
                 },
             )
+            if resumed := _resume_recommendation_after_confirmation(
+                state,
+                customer,
+                cleared_pending,
+            ):
+                return resumed
             reply = (
                 "I won't use the old profile. Please tell me your current skin type and concerns."
                 if language == "en"
@@ -216,6 +281,12 @@ def profile_confirmation_node(state: AgentState) -> dict[str, Any]:
             result = _reply(reply, session_update=cleared_pending)
             result["customer"] = customer
             return result
+        if resumed := _resume_recommendation_after_confirmation(
+            state,
+            state.get("customer", {}),
+            cleared_pending,
+        ):
+            return resumed
         reply = (
             "Okay, I haven't changed your saved profile."
             if language == "en"
@@ -238,8 +309,16 @@ def _extract_profile_information(text: str) -> dict[str, Any]:
             SystemMessage(
                 content=(
                     "Trích xuất memory hồ sơ chỉ từ điều khách trực tiếp khẳng định "
-                    "trong tin nhắn hiện tại. Không suy luận loại da từ nhu cầu hoặc "
-                    "sản phẩm. concerns là vấn đề như mụn, nám, lão hóa. "
+                    "về CHÍNH HỌ trong tin nhắn hiện tại. Không lưu loại da, dị ứng, "
+                    "vấn đề hoặc sở thích của mẹ, bạn bè, khách hàng hay người khác "
+                    "vào hồ sơ người gửi; khi các thông tin đó thuộc về người khác, "
+                    "gọi third_party_profile_context. Gọi consultation_context_only "
+                    "khi loại da/vấn đề chỉ được dùng làm điều kiện hỏi hoặc tìm sản "
+                    "phẩm, nhưng khách không khẳng định đó là hồ sơ của chính họ. Ví "
+                    "dụ một câu hỏi chung về sản phẩm cho da khô không phải là yêu cầu "
+                    "đổi hồ sơ; còn lời khẳng định rõ da của tôi/mình là da khô mới là "
+                    "dữ liệu hồ sơ. Không suy luận loại da từ nhu cầu hoặc sản phẩm. "
+                    "concerns là vấn đề như mụn, nám, lão hóa. "
                     "disliked_products chỉ gồm mã/tên sản phẩm khách nói không thích "
                     "hoặc không muốn được gợi ý. Nếu khách nói rõ không còn một nhóm "
                     "thông tin nào, đưa tên nhóm đó vào cleared_fields. Nếu không có "
@@ -251,6 +330,10 @@ def _extract_profile_information(text: str) -> dict[str, Any]:
         ],
         error_message="Gemini không trích xuất được thông tin hồ sơ.",
     )
+    if call["name"] == "third_party_profile_context":
+        return {"_profile_subject": "other"}
+    if call["name"] == "consultation_context_only":
+        return {"_consultation_context_only": True}
     if call["name"] == "no_profile_information":
         return {}
     if call["name"] != "remember_profile_information":
@@ -298,6 +381,8 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
     customer = state.get("customer") or find_customer_by_zalo_id(state.get("user_id", "")) or {}
     latest_text = latest_user_text(state)
     extracted = _extract_profile_information(latest_text)
+    is_third_party_request = extracted.pop("_profile_subject", None) == "other"
+    is_consultation_context_only = bool(extracted.pop("_consultation_context_only", False))
     updates = _merge_new_information(customer, extracted)
     language = _language(state)
 
@@ -310,6 +395,7 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
             session_update={
                 "pending_profile_update": updates,
                 "pending_profile_reason": "changed",
+                **_recommendation_resume_update(state),
             },
         )
 
@@ -325,6 +411,7 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
             session_update={
                 "pending_profile_update": updates,
                 "pending_profile_reason": "changed",
+                **_recommendation_resume_update(state),
             },
         )
 
@@ -340,7 +427,12 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
             result["customer"] = customer
             return result
 
-    if customer.get("skin_type") and _profile_is_stale(customer):
+    if (
+        customer.get("skin_type")
+        and not is_third_party_request
+        and not is_consultation_context_only
+        and _profile_is_stale(customer)
+    ):
         snapshot = {
             "skin_type": customer.get("skin_type", ""),
             **{field: customer.get(field, []) for field in LIST_PROFILE_FIELDS},
@@ -350,6 +442,7 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
             session_update={
                 "pending_profile_update": snapshot,
                 "pending_profile_reason": "stale",
+                **_recommendation_resume_update(state),
             },
         )
 
@@ -357,8 +450,14 @@ def profile_memory_node(state: AgentState) -> dict[str, Any]:
 
 
 def route_after_profile_confirmation(state: AgentState) -> str:
+    if state.get("profile_memory_resume_intent") == "recommendation":
+        return "recommendation"
     return "end" if state.get("profile_memory_handled") else "classify_intent"
 
 
 def route_after_profile_memory(state: AgentState) -> str:
-    return "end" if state.get("profile_memory_handled") else "assistant"
+    if state.get("profile_memory_handled"):
+        return "end"
+    if state.get("session", {}).get("current_intent") == "recommendation":
+        return "recommendation"
+    return "assistant"

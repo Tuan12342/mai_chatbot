@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 
+from mai_agent.catalog import find_product
 from mai_agent.chat_sessions import (
     create_chat_session,
     get_chat_session,
@@ -21,7 +22,12 @@ from mai_agent.chat_sessions import (
 from mai_agent.config import get_settings
 from mai_agent.customer_store import find_customer_by_zalo_id, load_customers
 from mai_agent.graph import create_agent_graph
-from mai_agent.observability import create_langfuse_handler
+from mai_agent.observability import (
+    create_langfuse_handler,
+    get_langfuse_client,
+    langfuse_observation,
+    langfuse_trace,
+)
 from mai_agent.order_store import save_order
 from mai_agent.payment import build_vietqr_payment
 from mai_agent.vision import InvalidSkinImage, SkinConsultationService, sanitize_skin_image
@@ -150,9 +156,28 @@ def _read_payment(session_id: str) -> dict[str, Any] | None:
     return _payment_for_order((snapshot.values or {}).get("active_order", {}))
 
 
-def _record_skin_exchange(session_id: str, user_id: str, message: str, reply: str) -> None:
+def _record_skin_exchange(
+    session_id: str,
+    user_id: str,
+    message: str,
+    reply: str,
+    *,
+    status: str,
+    product_ids: list[str],
+) -> None:
     """Chỉ lưu text và dấu mốc ảnh; tuyệt đối không đưa bytes/base64 vào checkpoint."""
     safe_message = f"[Đã gửi ảnh da để phân tích riêng tư] {message}"
+    recommended_candidates = []
+    for product_id in product_ids:
+        product = find_product(product_id)
+        if product is not None:
+            recommended_candidates.append(
+                {"product_id": product["id"], "product_name": product["name"]}
+            )
+    has_recommendations = status in {
+        "recommended",
+        "recommended_with_medical_review",
+    } and bool(recommended_candidates)
     with GRAPH_LOCK:
         graph.update_state(
             _graph_config(session_id),
@@ -163,6 +188,21 @@ def _record_skin_exchange(session_id: str, user_id: str, message: str, reply: st
                     AIMessage(content=reply),
                 ],
                 "reply": reply,
+                "session": {
+                    "current_step": (
+                        "awaiting_skin_guidance_confirmation"
+                        if has_recommendations
+                        else "idle"
+                    ),
+                    "pending_skin_product_ids": (
+                        [item["product_id"] for item in recommended_candidates]
+                        if has_recommendations
+                        else []
+                    ),
+                    "last_product_candidates": (
+                        recommended_candidates if has_recommendations else []
+                    ),
+                },
             },
         )
 
@@ -259,62 +299,98 @@ def skin_analysis(
     session_id: Annotated[str, Form(min_length=1, max_length=100)],
     user_id: Annotated[str, Form(min_length=1, max_length=100)],
     message: Annotated[str, Form(min_length=1, max_length=4000)],
-    consent: Annotated[bool, Form()],
     image: Annotated[UploadFile, File()],
 ) -> ChatResponse:
     _require_test_user(user_id)
     if get_chat_session(session_id, user_id) is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên chat.")
-    if not consent:
-        raise HTTPException(
-            status_code=400,
-            detail="Cần xác nhận người trong ảnh đã đồng ý cho phân tích.",
-        )
-
     settings = get_settings()
     uploaded = image.file.read(settings.skin_image_max_bytes + 1)
-    try:
-        image_bytes, mime_type = sanitize_skin_image(
-            uploaded,
-            image.content_type or "",
-            settings.skin_image_max_bytes,
-        )
-    except InvalidSkinImage as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+    langfuse = get_langfuse_client()
+    with langfuse_trace(
+        langfuse,
+        name="skin-analysis",
+        user_id=user_id,
+        session_id=session_id,
+        input={
+            "message": message.strip(),
+            "image": {
+                "filename": image.filename,
+                "content_type": image.content_type,
+                "size_bytes": len(uploaded),
+            },
+        },
+        tags=["mai-agent", "web", "skin-analysis"],
+    ) as trace:
+        try:
+            with langfuse_observation(
+                langfuse,
+                name="validate-image",
+                as_type="guardrail",
+                input={"content_type": image.content_type, "size_bytes": len(uploaded)},
+            ) as validation:
+                image_bytes, mime_type = sanitize_skin_image(
+                    uploaded,
+                    image.content_type or "",
+                    settings.skin_image_max_bytes,
+                )
+                if validation:
+                    validation.update(output={"valid": True, "mime_type": mime_type})
+        except InvalidSkinImage as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
-    customer = find_customer_by_zalo_id(user_id) or {}
-    try:
-        consultation = SkinConsultationService(settings=settings).consult(
-            image_bytes=image_bytes,
-            mime_type=mime_type,
-            message=message.strip(),
-            customer=customer,
-        )
-        _record_skin_exchange(session_id, user_id, message.strip(), consultation.reply)
-        touch_chat_session(session_id, user_id, message.strip())
-    except Exception as error:
-        LOGGER.exception("Không thể xử lý yêu cầu phân tích ảnh da", exc_info=error)
-        raise HTTPException(
-            status_code=502,
-            detail="Mai chưa thể phân tích ảnh lúc này. Vui lòng thử lại sau.",
-        ) from error
-    finally:
-        # Không giữ tham chiếu đến dữ liệu ảnh lâu hơn vòng đời request.
-        image_bytes = b""
-        uploaded = b""
+        customer = find_customer_by_zalo_id(user_id) or {}
+        try:
+            consultation = SkinConsultationService(
+                settings=settings,
+                langfuse_client=langfuse,
+            ).consult(
+                image_bytes=image_bytes,
+                mime_type=mime_type,
+                message=message.strip(),
+                customer=customer,
+            )
+            _record_skin_exchange(
+                session_id,
+                user_id,
+                message.strip(),
+                consultation.reply,
+                status=consultation.status,
+                product_ids=consultation.product_ids,
+            )
+            touch_chat_session(session_id, user_id, message.strip())
+        except Exception as error:
+            LOGGER.exception("Không thể xử lý yêu cầu phân tích ảnh da", exc_info=error)
+            raise HTTPException(
+                status_code=502,
+                detail="Mai chưa thể phân tích ảnh lúc này. Vui lòng thử lại sau.",
+            ) from error
+        finally:
+            # Không giữ tham chiếu đến dữ liệu ảnh lâu hơn vòng đời request.
+            image_bytes = b""
+            uploaded = b""
 
-    state = _read_session_state(session_id)
-    session = state.get("session", {})
-    handoff = state.get("handoff", {})
-    return ChatResponse(
-        reply=consultation.reply,
-        current_step=session.get("current_step", "idle"),
-        cart=session.get("cart", []),
-        handoff_status=handoff.get("status", "inactive"),
-        payment=_payment_for_order(state.get("active_order", {})),
-        analysis_status=consultation.status,
-        recommended_product_ids=consultation.product_ids,
-    )
+        state = _read_session_state(session_id)
+        session = state.get("session", {})
+        handoff = state.get("handoff", {})
+        response = ChatResponse(
+            reply=consultation.reply,
+            current_step=session.get("current_step", "idle"),
+            cart=session.get("cart", []),
+            handoff_status=handoff.get("status", "inactive"),
+            payment=_payment_for_order(state.get("active_order", {})),
+            analysis_status=consultation.status,
+            recommended_product_ids=consultation.product_ids,
+        )
+        if trace:
+            trace.update(
+                output={
+                    "analysis_status": consultation.status,
+                    "recommended_product_ids": consultation.product_ids,
+                },
+                level="DEFAULT",
+            )
+        return response
 
 
 def main() -> None:

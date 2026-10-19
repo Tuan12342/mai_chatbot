@@ -320,7 +320,39 @@ def cancel_entire_order_flow() -> str:
     return "cancel"
 
 
-ORDER_CONTROL_TOOLS = [continue_order_flow, cancel_entire_order_flow]
+@tool
+def return_to_product_selection() -> str:
+    """Khách muốn quay lại bước chọn sản phẩm hoặc đổi sang sản phẩm khác."""
+    return "selecting_product"
+
+
+@tool
+def return_to_quantity_step() -> str:
+    """Khách muốn quay lại bước nhập hoặc sửa số lượng sản phẩm."""
+    return "collecting_quantity"
+
+
+@tool
+def return_to_shipping_step() -> str:
+    """Khách muốn quay lại bước nhập hoặc sửa địa chỉ hay số điện thoại giao hàng."""
+    return "collecting_address"
+
+
+@tool
+def return_to_confirmation_step() -> str:
+    """Khách muốn xem lại và quay về bước xác nhận đơn hàng."""
+    return "confirming_order"
+
+
+ORDER_CONTROL_TOOLS = [
+    continue_order_flow,
+    cancel_entire_order_flow,
+    modify_cart,
+    return_to_product_selection,
+    return_to_quantity_step,
+    return_to_shipping_step,
+    return_to_confirmation_step,
+]
 
 
 def _interpret_pending_selection(
@@ -444,7 +476,11 @@ def _interpret_order_request(
                     "nằm trong SKU như OA002 không phải số lượng. Chuyển số lượng viết "
                     "bằng chữ thành số. Nếu khách nói "
                     "'loại 1', 'loại 2'..., ánh xạ theo đúng thứ tự danh sách đã giới "
-                    "thiệu và trả mã SKU tương ứng. Nếu khách chỉ nêu ý định mua, số lượng "
+                    "thiệu và trả mã SKU tương ứng. Khi khách dùng tên rút gọn, cách gọi "
+                    "đời thường hoặc mô tả sản phẩm, hãy đối chiếu ngữ nghĩa với tên trong "
+                    "danh sách đã giới thiệu và trả SKU nếu xác định được đúng một lựa chọn. "
+                    "Không tạo SKU ngoài danh sách hay tự bịa sản phẩm. Nếu khách chỉ nêu "
+                    "ý định mua, số lượng "
                     "hoặc đơn vị như 'mua 2 lọ' mà không nhắc tên, mã hay 'loại này', đặt "
                     "product_reference=null để hệ thống nối với ngữ cảnh lượt trước. "
                     "Nếu có danh sách sản phẩm đang chờ số lượng, hãy áp dụng câu trả "
@@ -677,18 +713,28 @@ def _interpret_order_control(
     text: str,
     current_step: str,
     cart: list[dict[str, Any]],
-) -> str:
-    """Nhận diện yêu cầu hủy toàn bộ ở mọi bước của đơn đang làm."""
+) -> str | dict[str, Any]:
+    """Để model suy luận tiếp tục, hủy hoặc chuyển bước từ ngôn ngữ tự nhiên."""
     call = invoke_tool(
         ORDER_CONTROL_TOOLS,
         [
             SystemMessage(
                 content=(
-                    "Xác định khách có muốn hủy toàn bộ đơn đang làm hay không. "
-                    "Chỉ gọi cancel_entire_order_flow khi khách nói rõ muốn thôi mua, "
-                    "khỏi mua nữa, hủy đơn hoặc dừng toàn bộ việc đặt hàng. Một câu "
-                    "'không' đơn lẻ hoặc từ chối một đề nghị cục bộ phải gọi "
-                    "continue_order_flow. Không tự trả lời khách."
+                    "Hiểu ý định điều khiển luồng đặt hàng từ câu tự nhiên và bắt buộc "
+                    "gọi đúng một tool. Gọi cancel_entire_order_flow chỉ khi khách muốn "
+                    "hủy toàn bộ đơn. Gọi tool return_to_* tương ứng khi khách muốn quay "
+                    "lại hoặc chuyển đến một bước khác nhưng CHƯA cung cấp giá trị mới. "
+                    "Gọi modify_cart khi khách đã nói rõ thay đổi sản phẩm hoặc số lượng; "
+                    "không gọi return_to_product_selection/return_to_quantity_step trong "
+                    "trường hợp đó. Nếu giỏ chỉ có đúng một SKU và khách chỉ nêu số lượng "
+                    "mới mà lược bỏ tên sản phẩm, áp dụng update_quantity cho SKU duy nhất "
+                    "đó. Phân biệt update_quantity (tổng số lượng mới) với add (mua thêm). "
+                    "Nếu giỏ có nhiều SKU và khách không xác định được sản phẩm cần sửa, "
+                    "gọi continue_order_flow để hệ thống hỏi làm rõ. Nếu khách đang cung "
+                    "cấp dữ liệu cho bước hiện tại, chọn sản phẩm mới chưa có trong giỏ "
+                    "hoặc từ chối một đề nghị cục bộ thì gọi continue_order_flow. "
+                    "Suy luận theo ngữ nghĩa, không yêu cầu khách dùng một cụm từ "
+                    "cố định. Không tự trả lời."
                 )
             ),
             HumanMessage(
@@ -704,6 +750,19 @@ def _interpret_order_control(
         return "cancel"
     if tool_name == "continue_order_flow":
         return "continue"
+    if tool_name == "modify_cart":
+        return {
+            "action": "modify",
+            "changes": call["args"].get("changes", []),
+        }
+    navigation_tools = {
+        "return_to_product_selection": "selecting_product",
+        "return_to_quantity_step": "collecting_quantity",
+        "return_to_shipping_step": "collecting_address",
+        "return_to_confirmation_step": "confirming_order",
+    }
+    if tool_name in navigation_tools:
+        return navigation_tools[tool_name]
     raise RuntimeError(f"Gemini gọi tool không được hỗ trợ: {tool_name}")
 
 
@@ -725,6 +784,75 @@ def _clean_cancelled_order_session() -> dict[str, Any]:
         "pending_revised_shipping_address": None,
         "pending_revised_phone": None,
     }
+
+
+def _navigate_order_step(
+    target_step: str,
+    session: dict[str, Any],
+    cart: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Chuyển bước có kiểm tra dữ liệu bắt buộc để không tạo state bất hợp lệ."""
+    if target_step == "selecting_product":
+        return _reply(
+            "Khách muốn quay lại bước chọn sản phẩm. Hỏi khách tên, mã hoặc loại "
+            "sản phẩm muốn chọn; vẫn giữ các sản phẩm đã có trong giỏ.",
+            {
+                "current_step": "selecting_product",
+                "cart": cart,
+                "pending_product_id": None,
+                "pending_product_reference": None,
+                "pending_product_candidates": session.get("last_product_candidates", []),
+                "pending_quantity": None,
+            },
+        )
+
+    if target_step == "collecting_quantity":
+        product_reference = session.get("pending_product_reference") or session.get(
+            "pending_product_id"
+        )
+        candidates = session.get("last_product_candidates", [])
+        if not product_reference and len(candidates) == 1:
+            product_reference = candidates[0].get("product_id")
+        if not product_reference:
+            return _reply(
+                "Khách muốn sửa số lượng nhưng chưa xác định được sản phẩm. "
+                "Hỏi khách chọn tên hoặc mã sản phẩm trước.",
+                {
+                    "current_step": "selecting_product",
+                    "cart": cart,
+                    "pending_product_candidates": candidates,
+                },
+            )
+        return _reply(
+            f"Khách muốn quay lại bước số lượng của {product_reference}. "
+            "Hỏi khách muốn mua bao nhiêu sản phẩm.",
+            {
+                "current_step": "collecting_quantity",
+                "cart": cart,
+                "pending_product_reference": product_reference,
+                "pending_quantity": None,
+            },
+        )
+
+    if target_step == "collecting_address":
+        if not cart:
+            return _navigate_order_step("selecting_product", session, cart)
+        return _reply(
+            "Khách muốn quay lại thông tin giao hàng. Hỏi khách cung cấp địa chỉ "
+            "hoặc số điện thoại cần thay đổi; chưa xác nhận đơn.",
+            {
+                "current_step": "collecting_address",
+                "cart": cart,
+                "pending_shipping_address": session.get("pending_shipping_address"),
+                "pending_phone": session.get("pending_phone"),
+            },
+        )
+
+    address = session.get("pending_shipping_address")
+    phone = session.get("pending_phone")
+    if not cart or not address or not phone:
+        return _navigate_order_step("collecting_address", session, cart)
+    return _reply_after_cart_ready(cart, address, phone)
 
 
 def _is_valid_shipping_address(address: str) -> bool:
@@ -988,6 +1116,15 @@ def order_node(state: AgentState) -> dict[str, Any]:
 
     if current_step != "idle":
         control_action = _interpret_order_control(text, current_step, cart)
+        if isinstance(control_action, dict) and control_action.get("action") == "modify":
+            return _prepare_cart_revision(
+                state,
+                original_cart=cart,
+                base_cart=cart,
+                changes=control_action.get("changes", []),
+                revised_address=session.get("pending_shipping_address"),
+                revised_phone=session.get("pending_phone"),
+            )
         if control_action == "cancel":
             return _reply(
                 "Khách đã yêu cầu dừng và hủy toàn bộ đơn đang làm. Xác nhận chưa "
@@ -995,6 +1132,9 @@ def order_node(state: AgentState) -> dict[str, Any]:
                 "đơn này. Không hỏi tiếp địa chỉ, số lượng hay xác nhận đơn.",
                 _clean_cancelled_order_session(),
             )
+
+        if control_action not in {"continue", "cancel"}:
+            return _navigate_order_step(control_action, session, cart)
 
     if current_step == "confirming_alternative":
         accepted = _interpret_binary_choice(

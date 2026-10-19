@@ -31,6 +31,8 @@
     .bubble { max-width:min(70%,650px); padding:12px 15px; border-radius:17px; white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.55; }
     .message.assistant .bubble { border:1px solid var(--border); border-bottom-left-radius:5px; background:#fff; box-shadow:0 8px 25px rgba(77,41,51,.045); }
     .message.user .bubble { border-bottom-right-radius:5px; background:var(--brand); color:#fff; }
+    .message-image { display:block; width:min(320px,65vw); max-height:420px; object-fit:cover; border-radius:12px; background:#f2e4e5; }
+    .message-image + .message-text { margin-top:9px; }
     .payment-card { width:min(100%,420px); margin:0 0 18px; padding:20px; border:1px solid #e5c8d1; border-radius:20px; background:#fff; box-shadow:0 12px 30px rgba(77,41,51,.07); }
     .payment-title { margin:0 0 4px; color:var(--brand-dark); font-size:16px; }
     .payment-subtitle { margin:0 0 16px; color:var(--muted); font-size:12px; }
@@ -49,9 +51,8 @@
     .composer { display:grid; grid-template-columns:auto 1fr auto; align-items:end; gap:10px; padding:9px; border:1px solid var(--border); border-radius:19px; background:#fff; box-shadow:0 14px 36px rgba(82,39,51,.08); }
     .attach { width:42px; height:42px; border:1px solid var(--border); border-radius:14px; background:#fff5f8; color:var(--brand); cursor:pointer; font-size:18px; }
     .attach:hover { background:#fbe7ed; }
-    .image-consent { display:none; margin:8px 4px 0; color:var(--muted); font-size:11px; line-height:1.4; }
-    .image-consent.visible { display:flex; align-items:flex-start; gap:7px; }
-    .image-consent input { margin-top:2px; }
+    .image-selection { display:none; margin:8px 4px 0; color:var(--muted); font-size:11px; line-height:1.4; }
+    .image-selection.visible { display:block; }
     .image-name { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--brand-dark); font-weight:600; }
     textarea { width:100%; max-height:130px; resize:none; border:0; outline:0; background:transparent; color:var(--text); line-height:1.5; }
     textarea::placeholder { color:#b4a5aa; }
@@ -99,10 +100,7 @@
         <textarea id="input" rows="1" maxlength="4000" placeholder="Nhắn tin cho Mai…" aria-label="Tin nhắn"></textarea>
         <button class="send" id="send" type="submit" aria-label="Gửi tin nhắn">↑</button>
       </form>
-      <label class="image-consent" id="image-consent">
-        <input id="consent" type="checkbox">
-        <span>Tôi xác nhận đây là ảnh của tôi hoặc người trong ảnh đã đồng ý cho phân tích. <span class="image-name" id="image-name"></span></span>
-      </label>
+      <div class="image-selection" id="image-selection">Ảnh đã chọn: <span class="image-name" id="image-name"></span></div>
       <div class="hint">Enter để gửi · Shift + Enter để xuống dòng</div>
     </footer>
   </main>
@@ -118,8 +116,7 @@
     const newSession=document.querySelector("#new-session");
     const attach=document.querySelector("#attach");
     const skinImage=document.querySelector("#skin-image");
-    const consent=document.querySelector("#consent");
-    const imageConsent=document.querySelector("#image-consent");
+    const imageSelection=document.querySelector("#image-selection");
     const imageName=document.querySelector("#image-name");
     let busy=false;
     let activeUserId=null;
@@ -132,6 +129,17 @@
       const row=document.createElement("div"); row.className=`message ${role}`;
       const bubble=document.createElement("div"); bubble.className="bubble"; bubble.textContent=content;
       row.appendChild(bubble); messages.appendChild(row); scrollToBottom();
+    }
+    function addUserImageMessage(content,imageFile){
+      const row=document.createElement("div"); row.className="message user";
+      const bubble=document.createElement("div"); bubble.className="bubble";
+      const preview=document.createElement("img"); preview.className="message-image"; preview.alt=`Ảnh da đã gửi: ${imageFile.name}`;
+      const previewUrl=URL.createObjectURL(imageFile);
+      preview.addEventListener("load",()=>{ URL.revokeObjectURL(previewUrl); scrollToBottom(); },{once:true});
+      preview.addEventListener("error",()=>URL.revokeObjectURL(previewUrl),{once:true});
+      preview.src=previewUrl;
+      const text=document.createElement("div"); text.className="message-text"; text.textContent=content;
+      bubble.append(preview,text); row.appendChild(bubble); messages.appendChild(row); scrollToBottom();
     }
     function addTyping(){
       const row=document.createElement("div"); row.className="message assistant";
@@ -169,15 +177,16 @@
       status.textContent=waiting?"Đang chờ người thật":data.current_step==="idle"?"Sẵn sàng":data.current_step;
     }
     async function sendMessage(text){
-      const clean=text.trim(); if(!clean||busy||!activeUserId||!activeSessionId)return;
       const image=skinImage.files[0];
-      if(image&&!consent.checked){ addMessage("assistant","Bạn cần xác nhận quyền sử dụng ảnh trước khi gửi."); return; }
-      addMessage("user",image?`${clean}\n[Đã gửi ảnh da]`:clean); input.value=""; resizeInput(); setBusy(true);
+      const clean=text.trim(); if((!clean&&!image)||busy||!activeUserId||!activeSessionId)return;
+      const requestMessage=clean||(image?"Hãy phân tích ảnh da này và tư vấn sản phẩm phù hợp.":"");
+      if(image)addUserImageMessage(clean||"Phân tích ảnh da này",image); else addMessage("user",clean);
+      input.value=""; resizeInput(); setBusy(true);
       const typing=addTyping();
       try{
         let response;
         if(image){
-          const body=new FormData(); body.append("session_id",activeSessionId); body.append("user_id",activeUserId); body.append("message",clean); body.append("consent","true"); body.append("image",image);
+          const body=new FormData(); body.append("session_id",activeSessionId); body.append("user_id",activeUserId); body.append("message",requestMessage); body.append("image",image);
           response=await fetch("/api/skin-analysis",{method:"POST",body});
         }else{
           response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:activeSessionId,user_id:activeUserId,message:clean})});
@@ -186,7 +195,7 @@
         if(!response.ok)throw new Error(data.detail||"Không thể gửi tin nhắn.");
         addPaymentCard(data.payment);
         if(data.reply)addMessage("assistant",data.reply);
-        if(image&&data.analysis_status!=="need_confirmation"){ skinImage.value=""; consent.checked=false; imageConsent.classList.remove("visible"); imageName.textContent=""; }
+        if(image&&data.analysis_status!=="need_confirmation"){ skinImage.value=""; imageSelection.classList.remove("visible"); imageName.textContent=""; }
         updateStatus(data); await refreshSessions();
       }catch(error){ typing.remove(); addMessage("assistant",error.message||"Có lỗi xảy ra. Vui lòng thử lại."); }
       finally{ setBusy(false); input.focus(); }
@@ -194,7 +203,7 @@
     form.addEventListener("submit",event=>{ event.preventDefault(); sendMessage(input.value); });
     attach.addEventListener("click",()=>{ if(!busy)skinImage.click(); });
     skinImage.addEventListener("change",()=>{
-      const image=skinImage.files[0]; imageConsent.classList.toggle("visible",Boolean(image)); imageName.textContent=image?`(${image.name})`:""; if(!image)consent.checked=false;
+      const image=skinImage.files[0]; imageSelection.classList.toggle("visible",Boolean(image)); imageName.textContent=image?image.name:"";
     });
     input.addEventListener("input",resizeInput);
     input.addEventListener("keydown",event=>{ if(event.key==="Enter"&&!event.shiftKey){ event.preventDefault(); form.requestSubmit(); } });

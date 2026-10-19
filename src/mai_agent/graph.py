@@ -23,7 +23,7 @@ from mai_agent.skills.handoff import (
 )
 from mai_agent.skills.order import order_node
 from mai_agent.skills.order_lookup import order_lookup_node
-from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node
+from mai_agent.skills.product import PRODUCT_TOOLS, assistant_node, recommendation_node
 from mai_agent.state import AgentState
 
 
@@ -62,6 +62,7 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
     builder.add_node("profile_memory", profile_memory_node)
     builder.add_node("classify_intent", classify_intent_node)
     builder.add_node("assistant", assistant_node)
+    builder.add_node("recommendation", recommendation_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
     builder.add_node("order", order_node)
     builder.add_node("order_lookup", order_lookup_node)
@@ -114,7 +115,11 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
     builder.add_conditional_edges(
         "profile_confirmation",
         route_after_profile_confirmation,
-        {"end": END, "classify_intent": "classify_intent"},
+        {
+            "end": END,
+            "classify_intent": "classify_intent",
+            "recommendation": "recommendation",
+        },
     )
     builder.add_conditional_edges(
         "classify_intent",
@@ -130,8 +135,9 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
     builder.add_conditional_edges(
         "profile_memory",
         route_after_profile_memory,
-        {"end": END, "assistant": "assistant"},
+        {"end": END, "assistant": "assistant", "recommendation": "recommendation"},
     )
+    builder.add_edge("recommendation", END)
     builder.add_conditional_edges(
         "assistant",
         tools_condition,
