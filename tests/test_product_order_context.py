@@ -5,7 +5,15 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from mai_agent.skills.order import node as order_node_module
 from mai_agent.skills.order.node import _contextualize_requested_items
 from mai_agent.skills.order.tools import normalize_order_items
-from mai_agent.skills.product.node import _recent_product_candidates
+from mai_agent.skills.product import tools as product_tools_module
+from mai_agent.skills.product.node import (
+    _has_product_tool_result_for_latest_user,
+    _recent_product_candidates,
+)
+from mai_agent.skills.product.tools import (
+    search_product_knowledge,
+    search_products_by_ingredient,
+)
 
 
 def _tool_message(name: str, payload: object) -> ToolMessage:
@@ -47,6 +55,99 @@ def test_previous_candidates_are_collected_from_product_tool_result() -> None:
     assert _recent_product_candidates(messages, "Dùng OA002 và OA008.") == [
         {"product_id": "OA002", "product_name": "Gel rửa mặt OA Purifying Gel"},
         {"product_id": "OA008", "product_name": "Kem chống nắng OA Daily UV Fluid"},
+    ]
+
+
+def test_product_question_requires_retrieval_before_final_answer() -> None:
+    initial_messages = [
+        HumanMessage(content="Sữa rửa mặt dịu nhẹ có thành phần gì?"),
+    ]
+    retrieved_messages = [
+        *initial_messages,
+        _tool_message(
+            "search_product_knowledge",
+            {
+                "resolved_products": [
+                    {"id": "OA001", "name": "Sữa rửa mặt dịu nhẹ OA Gentle Cleanser"}
+                ],
+                "evidence": [],
+            },
+        ),
+    ]
+
+    assert _has_product_tool_result_for_latest_user(initial_messages) is False
+    assert _has_product_tool_result_for_latest_user(retrieved_messages) is True
+
+
+def test_vitamin_c_is_not_in_catalog() -> None:
+    result = search_products_by_ingredient.invoke({"ingredient": "Vitamin C"})
+
+    assert result["status"] == "ingredient_not_found"
+    assert result["products"] == []
+
+
+def test_ingredient_search_only_returns_exact_catalog_matches() -> None:
+    niacinamide = search_products_by_ingredient.invoke({"ingredient": "Niacinamide"})
+    ceramide = search_products_by_ingredient.invoke({"ingredient": "Ceramide"})
+    hyaluronic_acid = search_products_by_ingredient.invoke(
+        {"ingredient": "Hyaluronic Acid"}
+    )
+
+    assert [product["id"] for product in niacinamide["products"]] == [
+        "OA002",
+        "OA005",
+        "OA007",
+    ]
+    assert [product["id"] for product in ceramide["products"]] == ["OA004", "OA006"]
+    assert [product["id"] for product in hyaluronic_acid["products"]] == [
+        "OA003",
+        "OA007",
+    ]
+
+
+def test_unscoped_knowledge_search_does_not_use_nearest_product(monkeypatch) -> None:
+    def fail_if_called():
+        raise AssertionError("Vector search must not run without an exact product")
+
+    monkeypatch.setattr(product_tools_module, "get_product_vector_store", fail_if_called)
+    result = search_product_knowledge.invoke(
+        {"query": "Có serum Vitamin C không?", "product_references": []}
+    )
+
+    assert result["status"] == "product_reference_required"
+    assert result["evidence"] == []
+
+
+def test_found_ingredient_results_preserve_exact_product_candidates() -> None:
+    messages = [
+        HumanMessage(content="Sản phẩm nào có Ceramide?"),
+        _tool_message(
+            "search_products_by_ingredient",
+            {
+                "status": "found",
+                "ingredient_query": "Ceramide",
+                "products": [
+                    {
+                        "id": "OA004",
+                        "name": "Serum phục hồi OA Barrier Repair Serum",
+                        "matching_ingredients": ["Ceramide NP"],
+                    },
+                    {
+                        "id": "OA006",
+                        "name": "Kem dưỡng OA Ceramide Cream",
+                        "matching_ingredients": ["Ceramide Complex"],
+                    },
+                ],
+            },
+        ),
+    ]
+
+    assert _recent_product_candidates(messages) == [
+        {
+            "product_id": "OA004",
+            "product_name": "Serum phục hồi OA Barrier Repair Serum",
+        },
+        {"product_id": "OA006", "product_name": "Kem dưỡng OA Ceramide Cream"},
     ]
 
 

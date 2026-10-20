@@ -55,6 +55,10 @@ def _recent_product_candidates(
             for product in payload:
                 if isinstance(product, dict):
                     add_candidate(product.get("id"), product.get("name"))
+        elif message.name == "search_products_by_ingredient" and isinstance(payload, dict):
+            for product in payload.get("products", []):
+                if isinstance(product, dict):
+                    add_candidate(product.get("id"), product.get("name"))
         elif message.name == "search_product_knowledge" and isinstance(payload, dict):
             for product in payload.get("resolved_products", []):
                 if isinstance(product, dict):
@@ -68,7 +72,6 @@ def _recent_product_candidates(
 
     if response_text is None or len(candidates) <= 1:
         return candidates
-
 
     mentioned_by_id = [
         candidate
@@ -102,6 +105,18 @@ def _product_candidates_from_ids(product_ids: list[str]) -> list[dict[str, str]]
     return candidates
 
 
+def _has_product_tool_result_for_latest_user(messages: list[Any]) -> bool:
+    """Chỉ cho phép trả lời factual sau khi lượt hiện tại đã tra dữ liệu shop."""
+    latest_human_index = -1
+    for index, message in enumerate(messages):
+        if isinstance(message, HumanMessage):
+            latest_human_index = index
+    return any(
+        isinstance(message, ToolMessage) and message.name in {tool.name for tool in PRODUCT_TOOLS}
+        for message in messages[latest_human_index + 1 :]
+    )
+
+
 def assistant_node(state: AgentState) -> dict[str, Any]:
     customer = state.get("customer", {})
     session = state.get("session", {})
@@ -131,7 +146,13 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         f"- Thành phần cần loại trừ: {customer.get('excluded_ingredients', [])}\n"
         "Không hỏi hoặc tự suy đoán Zalo user ID."
     )
-    model_with_tools = create_chat_model().bind_tools(PRODUCT_TOOLS)
+    messages = state.get("messages", [])
+    must_retrieve_product_data = (
+        session.get("current_step") != "awaiting_skin_guidance_confirmation"
+        and not _has_product_tool_result_for_latest_user(messages)
+    )
+    bind_options = {"tool_choice": "any"} if must_retrieve_product_data else {}
+    model_with_tools = create_chat_model().bind_tools(PRODUCT_TOOLS, **bind_options)
     system_message = SystemMessage(
         content=(
             f"{SYSTEM_PROMPT}\n\n"
@@ -142,19 +163,29 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             f"{pending_product_context}\n"
             f"{skin_followup_context}\n"
             "Quy tắc sử dụng công cụ:\n"
+            "- Khi khách hỏi shop có/chứa thành phần X hoặc sản phẩm nào có X, bắt "
+            "buộc dùng search_products_by_ingredient. Thành phần phải khớp dữ liệu "
+            "ingredients trong catalog; tuyệt đối không lấy công dụng gần giống để "
+            "khẳng định sản phẩm chứa X.\n"
+            "- Khi công cụ không tìm thấy sản phẩm hoặc thành phần, hãy tự diễn đạt "
+            "tự nhiên rằng hiện shop chưa có. Không yêu cầu khách kiểm tra lại, không "
+            "đưa sản phẩm gần giống và không dùng một câu trả lời mẫu cố định.\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
-            "độ phù hợp hoặc so sánh sản phẩm.\n"
+            "độ phù hợp hoặc so sánh một sản phẩm đã xác định rõ.\n"
             "- Dùng search_products khi cần tìm theo mã, tên hoặc danh mục.\n"
             "- Dùng check_product_stock khi hỏi tồn kho hoặc số lượng có thể mua.\n"
             "  Khi thiếu hàng, truyền loại da và thành phần cần loại trừ từ hồ sơ trên "
             "để nhận gợi ý thay thế.\n"
             f"{profile_context}\n"
+            "- Khi khách hỏi thông tin về một sản phẩm đã nêu rõ, không dùng loại da "
+            "hay thành phần loại trừ trong hồ sơ để đổi câu hỏi thành tư vấn sản phẩm.\n"
+            "- Nếu kết quả công cụ chỉ resolve đúng một sản phẩm, chỉ trả lời về sản "
+            "phẩm đó; không nêu sản phẩm khác trừ khi kết quả công cụ có alternatives.\n"
             "- Khi giới thiệu, mô tả hoặc đề xuất sản phẩm trong câu trả lời cuối, luôn "
             "ghi kèm mã SKU lấy từ kết quả công cụ để duy trì đúng ngữ cảnh hội thoại.\n"
             "- Chỉ trả lời thông tin sản phẩm từ kết quả công cụ; không tự suy đoán."
         )
     )
-    messages = state.get("messages", [])
     response = model_with_tools.invoke([system_message, *messages])
 
     # Lượt yêu cầu tool thường chưa có nội dung trả lời. Giữ nguyên AIMessage

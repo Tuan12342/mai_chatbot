@@ -234,7 +234,7 @@ def _write_summary(output_path: Path, expected_total: int | None = None) -> None
         "",
     ]
     for record in records:
-        if record["status"] not in {"REVIEW"}:
+        if record["status"] not in {"PASS", "REVIEW"}:
             notes = "; ".join(record.get("notes", [])) or record.get("error", "")
             lines.append(f"- **{record['case_id']} — {record['status']}**: {notes}")
     output_path.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -261,6 +261,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--limit", type=int, help="Chỉ chạy N ca chưa hoàn thành tiếp theo.")
     parser.add_argument("--timeout", type=int, default=90, help="Timeout cho mỗi ca.")
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=0,
+        help="Số giây nghỉ giữa hai ca để tránh vượt rate limit của model.",
+    )
     parser.add_argument(
         "--fresh",
         action="store_true",
@@ -345,6 +351,8 @@ def main() -> None:
                 f"({result.get('duration_seconds', 0)}s)",
                 flush=True,
             )
+            if args.delay > 0 and index < len(pending):
+                time.sleep(args.delay)
     _write_summary(args.output, expected_total=len(cases))
     print(f"JSONL: {args.output}")
     print(f"Summary: {args.output.with_suffix('.md')}")

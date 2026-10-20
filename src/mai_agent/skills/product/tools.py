@@ -37,8 +37,7 @@ def _avoid_ingredient_terms(*groups: list[str] | None) -> set[str]:
 def search_products(keyword: str) -> list[dict[str, Any]]:
     """Tìm sản phẩm theo mã, tên hoặc danh mục.
 
-    Dùng tool này khi khách hỏi về thành phần, công dụng,
-    cách dùng, loại da phù hợp, giá hoặc thông tin sản phẩm."""
+    Không dùng tool này để tìm sản phẩm theo thành phần."""
     normalized_keyword = normalize_product_reference(keyword)
     if not normalized_keyword:
         return []
@@ -64,6 +63,55 @@ def search_products(keyword: str) -> list[dict[str, Any]]:
                 }
             )
     return matches
+
+
+@tool
+def search_products_by_ingredient(ingredient: str) -> dict[str, Any]:
+    """Tra chính xác sản phẩm có liệt kê một thành phần trong catalog.
+
+    Dùng khi khách hỏi shop có thành phần X không, sản phẩm nào chứa X, hoặc
+    muốn lọc sản phẩm theo thành phần. Không suy ra thành phần từ công dụng.
+    """
+    ingredient_query = ingredient.strip()
+    normalized_query = normalize_product_reference(ingredient_query)
+    if not normalized_query:
+        return {
+            "status": "invalid_ingredient",
+            "ingredient_query": ingredient_query,
+            "products": [],
+            "instruction": "Hãy yêu cầu khách nêu rõ tên thành phần cần tìm.",
+        }
+
+    products: list[dict[str, Any]] = []
+    for product in load_products():
+        matching_ingredients = [
+            listed_ingredient
+            for listed_ingredient in product["ingredients"]
+            if normalized_query
+            in normalize_product_reference(listed_ingredient)
+        ]
+        if not matching_ingredients:
+            continue
+        products.append(
+            {
+                "id": product["id"],
+                "name": product["name"],
+                "matching_ingredients": matching_ingredients,
+                "ingredients": product["ingredients"],
+                "price_vnd": product["price_vnd"],
+                "stock": product["stock"],
+            }
+        )
+
+    return {
+        "status": "found" if products else "ingredient_not_found",
+        "ingredient_query": ingredient_query,
+        "products": products,
+        "instruction": (
+            "Chỉ khẳng định sản phẩm chứa thành phần khi sản phẩm nằm trong "
+            "danh sách này. Không thay thế bằng sản phẩm có công dụng tương tự."
+        ),
+    }
 
 
 @tool
@@ -155,6 +203,19 @@ def search_product_knowledge(
             "instruction": "Không suy đoán sản phẩm; hãy hỏi khách xác nhận tên hoặc mã SKU.",
         }
 
+    if not references:
+        return {
+            "status": "product_reference_required",
+            "resolved_products": [],
+            "unresolved_references": [],
+            "evidence": [],
+            "instruction": (
+                "Không dùng semantic similarity để tự chọn sản phẩm. Nếu khách "
+                "tìm theo thành phần, hãy gọi search_products_by_ingredient; nếu "
+                "không, hãy yêu cầu tên, mã hoặc danh mục sản phẩm rõ ràng."
+            ),
+        }
+
     product_ids = [product["id"] for product in resolved_products]
     evidence = get_product_vector_store().search(
         query,
@@ -175,6 +236,7 @@ def search_product_knowledge(
 
 PRODUCT_TOOLS = [
     search_products,
+    search_products_by_ingredient,
     search_product_knowledge,
     check_product_stock,
 ]
