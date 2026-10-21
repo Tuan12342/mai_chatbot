@@ -162,6 +162,58 @@ def _validated_quantity(text: str, item: dict[str, Any]) -> int | None:
     return quantity if _has_quantity_evidence(text, evidence) else None
 
 
+@tool
+def use_explicit_order_quantity(quantity: int, evidence: str) -> dict[str, Any]:
+    """Khách đã trực tiếp nêu một số lượng mua hàng; evidence là đoạn nguyên văn."""
+    return {"quantity": quantity, "evidence": evidence}
+
+
+@tool
+def no_explicit_order_quantity() -> str:
+    """Khách chưa trực tiếp nêu số lượng mua hàng trong tin nhắn."""
+    return "not_provided"
+
+
+QUANTITY_INTERPRETATION_TOOLS = [
+    use_explicit_order_quantity,
+    no_explicit_order_quantity,
+]
+
+
+def _interpret_explicit_quantity(text: str) -> int | None:
+    """Để model hiểu số lượng; code chỉ xác minh bằng chứng có trong câu gốc."""
+    call = invoke_tool(
+        QUANTITY_INTERPRETATION_TOOLS,
+        [
+            SystemMessage(
+                content=(
+                    "Xác định khách có trực tiếp nêu số lượng muốn mua hay không và "
+                    "bắt buộc gọi đúng một tool. Dùng use_explicit_order_quantity khi "
+                    "câu nói thể hiện rõ số lượng mua, kể cả cách nói tự nhiên, viết "
+                    "bằng chữ hoặc dùng đơn vị như sản phẩm, lọ, chai, hộp. quantity "
+                    "là số nguyên dương và evidence phải chép đúng đoạn ngắn nguyên "
+                    "văn thể hiện số lượng. Dùng no_explicit_order_quantity nếu khách "
+                    "chỉ nói muốn mua mà không nói bao nhiêu. Không coi chữ số trong "
+                    "SKU, mã đơn, giá tiền, địa chỉ, số điện thoại hay số thứ tự lựa "
+                    "chọn là số lượng mua. Không tự trả lời khách."
+                )
+            ),
+            HumanMessage(content=f"Tin nhắn khách: {text}"),
+        ],
+        error_message="Gemini không xác định được số lượng mua hàng.",
+    )
+    if call["name"] == "no_explicit_order_quantity":
+        return None
+    if call["name"] != "use_explicit_order_quantity":
+        raise RuntimeError(f"Gemini gọi tool số lượng không được hỗ trợ: {call['name']}")
+    item = {
+        "quantity": call.get("args", {}).get("quantity"),
+        "quantity_explicitly_provided": True,
+        "quantity_evidence": call.get("args", {}).get("evidence", ""),
+    }
+    return _validated_quantity(text, item)
+
+
 def _contextual_product_reference(
     product_reference: str | None,
     offered_candidates: list[dict[str, str]],
@@ -514,14 +566,26 @@ def _interpret_order_request(
     args = call["args"]
     items = args.get("items", [])
     extracted_items = [
-            {
-                "product_reference": item.get("product_reference") or None,
-                "quantity": _validated_quantity(text, item),
-            }
-            for item in items
-        ]
+        {
+            "product_reference": item.get("product_reference") or None,
+            "quantity": _validated_quantity(text, item),
+        }
+        for item in items
+    ]
+    normalized_items = normalize_order_items(text, extracted_items)
+    if not any(item.get("quantity") is not None for item in normalized_items):
+        interpreted_quantity = _interpret_explicit_quantity(text)
+    else:
+        interpreted_quantity = None
+    if interpreted_quantity is not None:
+        if len(normalized_items) == 1 and normalized_items[0].get("quantity") is None:
+            normalized_items[0]["quantity"] = interpreted_quantity
+        elif not normalized_items and len(offered_candidates or []) == 1:
+            normalized_items.append(
+                {"product_reference": None, "quantity": interpreted_quantity}
+            )
     return {
-        "items": normalize_order_items(text, extracted_items),
+        "items": normalized_items,
         "address": " ".join(str(args.get("address", "")).split()),
         "phone": str(args.get("phone", "")).strip(),
     }
@@ -1018,8 +1082,19 @@ def _prepare_cart_revision(
             }
     revised_cart = list(consolidated.values())
 
-    if not revised_cart:
-        errors.append("Giỏ hàng sau khi sửa không được để trống.")
+    if not revised_cart and not errors:
+        return _reply(
+            "Bản sửa hiện chưa có sản phẩm nào. Giữ nguyên bản sửa rỗng đang chờ và "
+            "hỏi khách muốn thêm sản phẩm nào cùng số lượng mong muốn. Chưa áp dụng "
+            "lại giỏ cũ và chưa xác nhận đơn.",
+            {
+                "current_step": "confirming_cart_revision",
+                "cart": original_cart,
+                "pending_cart_revision": [],
+                "pending_revised_shipping_address": revised_address,
+                "pending_revised_phone": revised_phone,
+            },
+        )
 
     for item in revised_cart:
         stock = _check_stock(state, item["product_id"], item["quantity"])
@@ -1117,13 +1192,24 @@ def order_node(state: AgentState) -> dict[str, Any]:
     if current_step != "idle":
         control_action = _interpret_order_control(text, current_step, cart)
         if isinstance(control_action, dict) and control_action.get("action") == "modify":
+            revision_in_progress = current_step == "confirming_cart_revision"
             return _prepare_cart_revision(
                 state,
                 original_cart=cart,
-                base_cart=cart,
+                base_cart=(
+                    session.get("pending_cart_revision", [])
+                    if revision_in_progress
+                    else cart
+                ),
                 changes=control_action.get("changes", []),
-                revised_address=session.get("pending_shipping_address"),
-                revised_phone=session.get("pending_phone"),
+                revised_address=session.get(
+                    "pending_revised_shipping_address"
+                    if revision_in_progress
+                    else "pending_shipping_address"
+                ),
+                revised_phone=session.get(
+                    "pending_revised_phone" if revision_in_progress else "pending_phone"
+                ),
             )
         if control_action == "cancel":
             return _reply(

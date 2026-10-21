@@ -16,6 +16,7 @@ LanguageSignal = Literal[
 ]
 
 Intent = Literal[
+    "greeting",
     "product_question",
     "recommendation",
     "order",

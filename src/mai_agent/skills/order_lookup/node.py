@@ -1,49 +1,11 @@
-import re
+import json
 from typing import Any
 
 from langchain_core.messages import AIMessage
 
-from mai_agent.customer_store import find_customer_by_zalo_id
-from mai_agent.order_store import find_order_by_id
+from mai_agent.order_store import find_orders_by_customer_id
 from mai_agent.reply_generator import generate_reply
-from mai_agent.routing import latest_user_text
 from mai_agent.state import AgentState
-
-ORDER_ID_PATTERN = re.compile(r"\bORDER-[A-Z0-9]+\b", flags=re.IGNORECASE)
-PHONE_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9-])(?:\+?84|0)[\d .()-]{7,14}\d(?!\d)"
-)
-
-
-def _normalize_phone(value: str) -> str | None:
-    normalized = re.sub(r"[\s.()-]+", "", value.strip())
-    if normalized.startswith("+84"):
-        normalized = f"0{normalized[3:]}"
-    elif normalized.startswith("84"):
-        normalized = f"0{normalized[2:]}"
-    if re.fullmatch(r"0\d{9}", normalized):
-        return normalized
-    return None
-
-
-def _extract_phone(text: str) -> str | None:
-    for match in PHONE_PATTERN.finditer(text):
-        if phone := _normalize_phone(match.group(0)):
-            return phone
-    return None
-
-
-def _order_phone(order: dict[str, Any]) -> str | None:
-    shipping_address = order.get("shipping_address", {})
-    if isinstance(shipping_address, dict):
-        phone = _normalize_phone(str(shipping_address.get("phone", "")))
-        if phone:
-            return phone
-
-    customer = find_customer_by_zalo_id(str(order.get("customer_id", "")))
-    if customer is None:
-        return None
-    return _normalize_phone(str(customer.get("phone", "")))
 
 
 def _reply(instruction: str, session: dict[str, Any]) -> dict[str, Any]:
@@ -54,69 +16,74 @@ def _reply(instruction: str, session: dict[str, Any]) -> dict[str, Any]:
     return {"reply": reply, "messages": [AIMessage(content=reply)], "session": session}
 
 
+def _safe_order_view(order: dict[str, Any]) -> dict[str, Any]:
+    """Chỉ giữ dữ liệu cần hiển thị, loại bỏ địa chỉ và thông tin liên hệ."""
+    items = []
+    for item in order.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        items.append(
+            {
+                "product_id": str(item.get("product_id", "")),
+                "product_name": str(item.get("product_name", "")),
+                "quantity": item.get("quantity", 0),
+                "unit_price": item.get("unit_price", 0),
+            }
+        )
+    return {
+        "order_id": str(order.get("order_id", "")),
+        "status": str(order.get("status", "unknown")),
+        "payment_status": str(order.get("payment_status", "unknown")),
+        "total_amount": order.get("total_amount", 0),
+        "items": items,
+    }
+
+
 def order_lookup_node(state: AgentState) -> dict[str, Any]:
-    """Chỉ trả dữ liệu đơn cũ sau khi mã đơn và số điện thoại cùng khớp."""
-    text = latest_user_text(state)
+    """Hiển thị mọi đơn thuộc đúng tài khoản của phiên hiện tại."""
     session = state.get("session", {})
-    order_match = ORDER_ID_PATTERN.search(text)
-    order_id = (
-        order_match.group(0).upper()
-        if order_match
-        else session.get("pending_order_lookup_id")
-    )
-    phone = _extract_phone(text)
+    customer_id = str(state.get("user_id") or "").strip()
+    next_session = {
+        "language_code": session.get("language_code", "vi"),
+        "current_step": "idle",
+        "pending_order_lookup_id": None,
+        "pending_order_lookup_attempts": 0,
+    }
 
-    if not order_id or not phone:
-        missing = []
-        if not order_id:
-            missing.append("mã đơn")
-        if not phone:
-            missing.append("số điện thoại đã dùng khi đặt hàng")
+    if not customer_id:
         return _reply(
-            "Để bảo vệ thông tin cá nhân, yêu cầu khách cung cấp "
-            f"{', '.join(missing)} trước khi tra cứu. Không xác nhận đơn có tồn tại "
-            "hay không và không tiết lộ bất kỳ thông tin đơn hàng nào.",
-            {
-                "current_step": "verifying_order_lookup",
-                "pending_order_lookup_id": order_id,
-                "pending_order_lookup_attempts": session.get(
-                    "pending_order_lookup_attempts", 0
-                ),
-            },
+            "Không xác định được tài khoản đang đăng nhập nên không được truy vấn hay "
+            "hiển thị dữ liệu đơn hàng. Thông báo ngắn gọn rằng chưa thể tải lịch sử "
+            "đơn của tài khoản hiện tại và đề nghị khách thử đăng nhập lại. Không hỏi "
+            "mã đơn hoặc số điện thoại.",
+            next_session,
         )
 
-    order = find_order_by_id(order_id)
-    verified = (
-        order is not None
-        and str(order.get("customer_id", "")) == state.get("user_id", "")
-        and _order_phone(order) == phone
-    )
-    if not verified:
-        attempts = session.get("pending_order_lookup_attempts", 0) + 1
+    # Repository đã lọc theo customer_id. Kiểm tra lại quyền sở hữu tại node để
+    # tránh lộ dữ liệu nếu implementation của repository thay đổi hoặc trả dư bản ghi.
+    owned_orders = [
+        order
+        for order in find_orders_by_customer_id(customer_id)
+        if str(order.get("customer_id", "")) == customer_id
+    ]
+    safe_orders = [_safe_order_view(order) for order in owned_orders]
+
+    if not safe_orders:
         return _reply(
-            "Không xác minh được thông tin tra cứu. Trả lời chung rằng mã đơn hoặc "
-            "số điện thoại chưa khớp và đề nghị khách kiểm tra lại; không nói trường "
-            "nào sai, không xác nhận đơn có tồn tại và không tiết lộ dữ liệu đơn.",
-            {
-                "current_step": "verifying_order_lookup",
-                "pending_order_lookup_id": None,
-                "pending_order_lookup_attempts": attempts,
-            },
+            "Tài khoản hiện tại không có đơn hàng nào. Thông báo điều này một cách "
+            "tự nhiên; không hỏi mã đơn hoặc số điện thoại và không suy đoán dữ liệu "
+            "của tài khoản khác.",
+            next_session,
         )
 
-    items = ", ".join(
-        f"{item['product_id']} - {item['product_name']} x{item['quantity']}"
-        for item in order.get("items", [])
-    )
+    order_data = json.dumps(safe_orders, ensure_ascii=False)
     return _reply(
-        f"Đã xác thực đúng mã đơn và số điện thoại. Thông báo thông tin đơn {order_id}: "
-        f"sản phẩm {items or 'không có dữ liệu'}; trạng thái {order.get('status', 'unknown')}; "
-        f"trạng thái thanh toán {order.get('payment_status', 'unknown')}; tổng tiền "
-        f"{order.get('total_amount', 0):,} đồng. Không đọc lại số điện thoại, địa chỉ "
-        "hoặc dữ liệu cá nhân khác.",
-        {
-            "current_step": "idle",
-            "pending_order_lookup_id": None,
-            "pending_order_lookup_attempts": 0,
-        },
+        "Hiển thị đầy đủ tất cả đơn hàng dưới đây của tài khoản hiện tại. Mỗi đơn phải "
+        "xuất hiện đúng một lần và gồm mã đơn, danh sách sản phẩm cùng số lượng, trạng "
+        "thái đơn, trạng thái thanh toán và tổng tiền. Diễn đạt rõ ràng, tự nhiên, có "
+        "thể dùng danh sách để dễ đọc. Giữ nguyên chính xác mã đơn, mã và tên sản phẩm; "
+        "không thêm dữ liệu không có, không hỏi mã đơn hay số điện thoại, không nhắc "
+        "địa chỉ hoặc thông tin liên hệ. Dữ liệu đơn đã được lọc theo tài khoản:\n"
+        f"{order_data}",
+        next_session,
     )

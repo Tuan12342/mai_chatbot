@@ -14,7 +14,12 @@ from mai_agent.profile_memory import (
     route_after_profile_confirmation,
     route_after_profile_memory,
 )
-from mai_agent.routing import classify_intent_node, detect_language_node, fallback_node
+from mai_agent.routing import (
+    classify_intent_node,
+    detect_language_node,
+    fallback_node,
+    greeting_node,
+)
 from mai_agent.skills.handoff import (
     create_handoff_node,
     handoff_guard_node,
@@ -29,6 +34,8 @@ from mai_agent.state import AgentState
 
 def route_by_intent(state: AgentState) -> str:
     intent = state.get("session", {}).get("current_intent", "unknown")
+    if intent == "greeting":
+        return "greeting"
     if intent == "order":
         return "order"
     if intent == "order_lookup":
@@ -61,6 +68,7 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
     builder.add_node("profile_confirmation", profile_confirmation_node)
     builder.add_node("profile_memory", profile_memory_node)
     builder.add_node("classify_intent", classify_intent_node)
+    builder.add_node("greeting", greeting_node)
     builder.add_node("assistant", assistant_node)
     builder.add_node("recommendation", recommendation_node)
     builder.add_node("product_tools", ToolNode(PRODUCT_TOOLS))
@@ -125,6 +133,7 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
         "classify_intent",
         route_by_intent,
         {
+            "greeting": "greeting",
             "assistant": "assistant",
             "profile_memory": "profile_memory",
             "order": "order",
@@ -132,6 +141,7 @@ def create_agent_graph(*, checkpointer=None, handoff_backend: str = "persistent"
             "fallback": "fallback",
         },
     )
+    builder.add_edge("greeting", END)
     builder.add_conditional_edges(
         "profile_memory",
         route_after_profile_memory,

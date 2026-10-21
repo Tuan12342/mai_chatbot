@@ -141,8 +141,14 @@ def route_product_question() -> str:
 
 
 @tool
+def route_greeting() -> str:
+    """Khách chỉ đang chào hỏi hoặc bắt đầu cuộc trò chuyện."""
+    return "greeting"
+
+
+@tool
 def route_unknown() -> str:
-    """Yêu cầu chưa được hỗ trợ, gồm tra đơn cũ hoặc ngoài tư vấn và mua sản phẩm."""
+    """Yêu cầu chưa đủ rõ hoặc nằm ngoài các nghiệp vụ được hỗ trợ."""
     return "unknown"
 
 
@@ -159,6 +165,7 @@ def route_out_of_scope() -> str:
 
 
 ROUTING_TOOLS = [
+    route_greeting,
     route_order,
     route_order_lookup,
     route_recommendation,
@@ -181,7 +188,9 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
                     "các nội dung: mỹ phẩm, chăm sóc da, thành phần, công dụng, "
                     "giá, tồn kho, tư vấn sản phẩm, mua hàng, giỏ hàng, "
                     "thông tin giao hàng, thanh toán, tra đơn, giao hàng, đổi trả "
-                    "hoặc khiếu nại về shop. Lời chào và câu trả lời ngắn như "
+                    "hoặc khiếu nại về shop. Lời chào, kể cả cách viết thân mật "
+                    "hoặc rút gọn như 'chào', 'hi', 'hello', 'alo', 'a lô', 'lô', "
+                    "và câu trả lời ngắn như "
                     "'có', 'không', 'đúng', số lượng, địa chỉ hay số điện "
                     "thoại là route_in_scope khi phù hợp bước hội thoại hiện tại. "
                     "Đặc biệt, khi bước hiện tại là "
@@ -219,17 +228,21 @@ def _interpret_intent(
             SystemMessage(
                 content=(
                     "Phân loại ý định chính và bắt buộc gọi đúng một routing tool; "
-                    "không tự trả lời khách. Ưu tiên route_order nếu khách yêu cầu "
+                    "không tự trả lời khách. Chọn route_greeting khi khách chỉ chào "
+                    "hỏi hoặc bắt đầu trò chuyện, kể cả cách viết thân mật hay rút "
+                    "gọn như 'chào', 'hi', 'hello', 'alo', 'a lô', 'lô'. Nếu lời "
+                    "chào đi kèm một nhu cầu cụ thể thì chọn intent của nhu cầu đó, "
+                    "không chọn route_greeting. Ưu tiên route_order nếu khách yêu cầu "
                     "lấy, mua hoặc chốt số lượng cụ thể, kể cả khi dùng 'loại này', "
                     "'sản phẩm này', 'loại 1', 'loại 2' hoặc kèm mã SKU. "
                     "Khi ngữ cảnh có recently_recommended_products và khách chọn một "
                     "sản phẩm cụ thể để nhận/lấy, phải chọn route_order dù khách chưa "
                     "nói số lượng; order flow sẽ hỏi số lượng ở bước sau. Không phân "
                     "loại trường hợp đã chọn mua này thành route_product_question. "
-                    "Chọn route_order_lookup khi khách muốn tra trạng thái, thanh toán, "
-                    "giao hàng hoặc thông tin của đơn đã tạo trước đó. Nếu bước hiện "
-                    "tại là verifying_order_lookup và khách đang cung cấp mã đơn hoặc "
-                    "số điện thoại xác thực thì bắt buộc chọn route_order_lookup. "
+                    "Chọn route_order_lookup khi khách muốn xem danh sách, trạng thái, "
+                    "thanh toán, giao hàng hoặc thông tin của đơn đã tạo trước đó. Hệ "
+                    "thống tự lấy tất cả đơn theo tài khoản của phiên hiện tại, không "
+                    "cần khách cung cấp mã đơn hoặc số điện thoại. "
                     "Nếu khách chỉ hỏi thông tin thì chọn route_product_question. "
                     "Nếu khách cần lựa chọn sản phẩm theo da hoặc cung cấp thêm đặc "
                     "điểm da để tiếp tục tư vấn thì chọn route_recommendation. "
@@ -255,6 +268,7 @@ def _interpret_intent(
         error_message="Gemini không chọn intent cho tin nhắn.",
     )
     tool_to_intent: dict[str, Intent] = {
+        "route_greeting": "greeting",
         "route_order": "order",
         "route_order_lookup": "order_lookup",
         "route_recommendation": "recommendation",
@@ -305,6 +319,25 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
     return update
 
 
+def greeting_node(state: AgentState) -> dict[str, Any]:
+    """Tạo lời chào tự nhiên mà không cố định nguyên văn câu trả lời."""
+    customer_name = str(state.get("customer", {}).get("name") or "").strip()
+    name_context = (
+        f"Tên khách đã biết là {customer_name}; có thể gọi tên một cách tự nhiên. "
+        if customer_name
+        else "Không biết tên khách nên không tự đặt hoặc đoán tên. "
+    )
+    reply = generate_reply(
+        "Khách vừa chào hoặc bắt đầu cuộc trò chuyện. "
+        f"{name_context}"
+        "Chào lại ngắn gọn, thân thiện với vai trò Mai của OA Cosmetics và mở lời "
+        "để khách chia sẻ nhu cầu về sản phẩm, chăm sóc da hoặc đơn hàng. Không liệt "
+        "kê dài dòng và không nói rằng yêu cầu của khách nằm ngoài phạm vi.",
+        response_language=state.get("session", {}).get("language_code", "vi"),
+    )
+    return {"reply": reply, "messages": [AIMessage(content=reply)]}
+
+
 def fallback_node(state: AgentState) -> dict[str, Any]:
     session = state.get("session", {})
     current_step = session.get("current_step", "idle")
@@ -322,7 +355,7 @@ def fallback_node(state: AgentState) -> dict[str, Any]:
     reply = generate_reply(
         "Yêu cầu của khách nằm ngoài phạm vi hỗ trợ hoặc chưa đủ "
         "rõ. Thông báo ngắn gọn rằng Mai chỉ hỗ trợ thông tin mỹ phẩm, "
-        "tư vấn chăm sóc da, đặt đơn mới và tra đơn có xác thực. Không trả "
+        "tư vấn chăm sóc da, đặt đơn mới và xem đơn của tài khoản hiện tại. Không trả "
         "lời nội dung ngoài phạm vi. Mời khách đặt câu hỏi liên quan "
         "đến sản phẩm hoặc nhu cầu chăm sóc da.",
         response_language=state.get("session", {}).get("language_code", "vi"),

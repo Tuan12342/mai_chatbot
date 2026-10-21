@@ -38,6 +38,147 @@ def test_named_product_without_quantity_does_not_default_to_one() -> None:
     ) == [{"product_reference": "OA002", "quantity": None}]
 
 
+def test_quantity_is_reinterpreted_semantically_when_initial_evidence_is_incomplete(
+    monkeypatch,
+) -> None:
+    decisions = iter(
+        [
+            {
+                "name": "provide_complete_order_request",
+                "args": {
+                    "items": [
+                        {
+                            "product_reference": None,
+                            "quantity": 1,
+                            "quantity_explicitly_provided": False,
+                            "quantity_evidence": "",
+                        }
+                    ],
+                    "address": "",
+                    "phone": "",
+                },
+            },
+            {
+                "name": "use_explicit_order_quantity",
+                "args": {"quantity": 1, "evidence": "1 sản phẩm"},
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        order_node_module,
+        "invoke_tool",
+        lambda *_args, **_kwargs: next(decisions),
+    )
+
+    result = order_node_module._interpret_order_request(
+        "cho mình 1 sản phẩm",
+        [{"product_id": "OA002", "product_name": "Gel rửa mặt OA Purifying Gel"}],
+    )
+
+    assert result["items"] == [{"product_reference": None, "quantity": 1}]
+
+
+def test_quantity_model_does_not_treat_sku_or_phone_as_quantity(monkeypatch) -> None:
+    decisions = iter(
+        [
+            {
+                "name": "provide_complete_order_request",
+                "args": {
+                    "items": [
+                        {
+                            "product_reference": "OA002",
+                            "quantity": None,
+                            "quantity_explicitly_provided": False,
+                            "quantity_evidence": "",
+                        }
+                    ],
+                    "address": "",
+                    "phone": "0901234567",
+                },
+            },
+            {"name": "no_explicit_order_quantity", "args": {}},
+        ]
+    )
+    monkeypatch.setattr(
+        order_node_module,
+        "invoke_tool",
+        lambda *_args, **_kwargs: next(decisions),
+    )
+
+    result = order_node_module._interpret_order_request(
+        "mua OA002, số điện thoại 0901234567",
+        [{"product_id": "OA002", "product_name": "Gel rửa mặt OA Purifying Gel"}],
+    )
+
+    assert result["items"] == [{"product_reference": "OA002", "quantity": None}]
+
+
+def test_one_product_from_single_recent_candidate_moves_to_shipping(monkeypatch) -> None:
+    decisions = iter(
+        [
+            {
+                "name": "provide_complete_order_request",
+                "args": {
+                    "items": [
+                        {
+                            "product_reference": None,
+                            "quantity": 1,
+                            "quantity_explicitly_provided": False,
+                            "quantity_evidence": "",
+                        }
+                    ],
+                    "address": "",
+                    "phone": "",
+                },
+            },
+            {
+                "name": "use_explicit_order_quantity",
+                "args": {"quantity": 1, "evidence": "1 sản phẩm"},
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        order_node_module,
+        "invoke_tool",
+        lambda *_args, **_kwargs: next(decisions),
+    )
+    monkeypatch.setattr(
+        order_node_module,
+        "_check_stock",
+        lambda *_args: {
+            "status": "available",
+            "product_id": "OA002",
+            "product_name": "Gel rửa mặt OA Purifying Gel",
+            "quantity": 1,
+            "unit_price": 219_000,
+        },
+    )
+    monkeypatch.setattr(order_node_module, "generate_reply", lambda text, **_kwargs: text)
+
+    result = order_node_module.order_node(
+        {
+            "messages": [HumanMessage(content="cho mình 1 sản phẩm")],
+            "session": {
+                "current_step": "idle",
+                "cart": [],
+                "last_product_candidates": [
+                    {"product_id": "OA002", "product_name": "Gel rửa mặt OA Purifying Gel"}
+                ],
+            },
+        }
+    )
+
+    assert result["session"]["current_step"] == "collecting_address"
+    assert result["session"]["cart"] == [
+        {
+            "product_id": "OA002",
+            "product_name": "Gel rửa mặt OA Purifying Gel",
+            "quantity": 1,
+            "unit_price": 219_000,
+        }
+    ]
+
+
 def test_previous_candidates_are_collected_from_product_tool_result() -> None:
     messages = [
         HumanMessage(content="Tư vấn sản phẩm"),
@@ -373,3 +514,83 @@ def test_quantity_update_from_shipping_step_keeps_recent_product_context(monkeyp
     assert result["session"]["cart"][0]["quantity"] == 1
     assert result["session"]["pending_cart_revision"][0]["product_id"] == "OA002"
     assert result["session"]["pending_cart_revision"][0]["quantity"] == 3
+
+
+def test_empty_cart_revision_is_kept_as_draft_for_the_next_change(monkeypatch) -> None:
+    monkeypatch.setattr(order_node_module, "generate_reply", lambda text, **_kwargs: text)
+    original_cart = [
+        {
+            "product_id": "OA002",
+            "product_name": "Gel rửa mặt OA Purifying Gel",
+            "quantity": 1,
+            "unit_price": 219_000,
+        }
+    ]
+
+    result = order_node_module._prepare_cart_revision(
+        {"session": {"language_code": "vi"}},
+        original_cart=original_cart,
+        base_cart=original_cart,
+        changes=[{"action": "remove", "product_id": "OA002"}],
+    )
+
+    assert result["session"]["current_step"] == "confirming_cart_revision"
+    assert result["session"]["cart"] == original_cart
+    assert result["session"]["pending_cart_revision"] == []
+
+
+def test_add_after_empty_revision_uses_draft_instead_of_old_cart(monkeypatch) -> None:
+    monkeypatch.setattr(
+        order_node_module,
+        "_interpret_order_control",
+        lambda *_args: {
+            "action": "modify",
+            "changes": [
+                {
+                    "action": "add",
+                    "product_id": "OA002",
+                    "quantity": 1,
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        order_node_module,
+        "_check_stock",
+        lambda _state, product_id, quantity: {
+            "status": "available",
+            "product_id": product_id,
+            "product_name": "Gel rửa mặt OA Purifying Gel",
+            "quantity": quantity,
+            "unit_price": 219_000,
+        },
+    )
+    monkeypatch.setattr(order_node_module, "generate_reply", lambda text, **_kwargs: text)
+
+    result = order_node_module.order_node(
+        {
+            "messages": [HumanMessage(content="thêm sữa rửa mặt cho tôi")],
+            "session": {
+                "current_step": "confirming_cart_revision",
+                "cart": [
+                    {
+                        "product_id": "OA002",
+                        "product_name": "Gel rửa mặt OA Purifying Gel",
+                        "quantity": 1,
+                        "unit_price": 219_000,
+                    }
+                ],
+                "pending_cart_revision": [],
+            },
+        }
+    )
+
+    assert result["session"]["current_step"] == "confirming_cart_revision"
+    assert result["session"]["pending_cart_revision"] == [
+        {
+            "product_id": "OA002",
+            "product_name": "Gel rửa mặt OA Purifying Gel",
+            "quantity": 1,
+            "unit_price": 219_000,
+        }
+    ]
