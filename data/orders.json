@@ -85,5 +85,25 @@
         "unit_price": 189000
       }
     ]
+  },
+  {
+    "order_id": "ORDER-C0C72D80",
+    "customer_id": "zalo-user-001",
+    "items": [
+      {
+        "product_id": "OA002",
+        "product_name": "Gel rửa mặt OA Purifying Gel",
+        "quantity": 2,
+        "unit_price": 219000
+      }
+    ],
+    "shipping_address": {
+      "address_id": "pending",
+      "address_line": "123abc",
+      "phone": "012345678"
+    },
+    "status": "confirmed",
+    "payment_status": "pending",
+    "total_amount": 438000
   }
 ]

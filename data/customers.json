@@ -6,12 +6,21 @@
     "skin_type": "da dầu",
     "sensitivities": [],
     "allergies": [],
-    "concerns": [],
+    "concerns": [
+      "mụn"
+    ],
     "excluded_ingredients": [
       "Alcohol"
     ],
     "disliked_product_ids": [],
-    "last_updated": "2026-10-14T09:08:19.898011+07:00"
+    "last_updated": "2026-10-19T14:13:23.237789+07:00",
+    "profile_metadata": {
+      "concerns": {
+        "source": "user_explicit",
+        "updated_at": "2026-10-19T14:13:23.237725+07:00",
+        "confirmed_at": "2026-10-19T14:13:23.237725+07:00"
+      }
+    }
   },
   {
     "zalo_user_id": "zalo-user-002",
