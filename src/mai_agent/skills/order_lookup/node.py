@@ -67,9 +67,16 @@ def order_lookup_node(state: AgentState) -> dict[str, Any]:
         if str(order.get("customer_id", "")) == customer_id
     ]
     safe_orders = [_safe_order_view(order) for order in owned_orders]
+    complaint_guidance = (
+        "Mở đầu bằng một lời xin lỗi ngắn vì trải nghiệm khách vừa phản ánh, sau đó "
+        "tiếp tục cung cấp dữ liệu cần thiết; không nói rằng đã handoff. "
+        if state.get("triage", {}).get("is_complaint")
+        else ""
+    )
 
     if not safe_orders:
         return _reply(
+            f"{complaint_guidance}"
             "Tài khoản hiện tại không có đơn hàng nào. Thông báo điều này một cách "
             "tự nhiên; không hỏi mã đơn hoặc số điện thoại và không suy đoán dữ liệu "
             "của tài khoản khác.",
@@ -78,6 +85,7 @@ def order_lookup_node(state: AgentState) -> dict[str, Any]:
 
     order_data = json.dumps(safe_orders, ensure_ascii=False)
     return _reply(
+        f"{complaint_guidance}"
         "Hiển thị đầy đủ tất cả đơn hàng dưới đây của tài khoản hiện tại. Mỗi đơn phải "
         "xuất hiện đúng một lần và gồm mã đơn, danh sách sản phẩm cùng số lượng, trạng "
         "thái đơn, trạng thái thanh toán và tổng tiền. Diễn đạt rõ ràng, tự nhiên, có "

@@ -3,7 +3,10 @@ import json
 from langchain_core.messages import HumanMessage, ToolMessage
 
 from mai_agent.skills.order import node as order_node_module
-from mai_agent.skills.order.node import _contextualize_requested_items
+from mai_agent.skills.order.node import (
+    _apply_one_of_each_quantity,
+    _contextualize_requested_items,
+)
 from mai_agent.skills.order.tools import normalize_order_items
 from mai_agent.skills.product import tools as product_tools_module
 from mai_agent.skills.product.node import (
@@ -14,6 +17,7 @@ from mai_agent.skills.product.tools import (
     search_product_knowledge,
     search_products_by_ingredient,
 )
+from mai_agent.skills.product.vector_store import build_product_chunks
 
 
 def _tool_message(name: str, payload: object) -> ToolMessage:
@@ -36,6 +40,69 @@ def test_named_product_without_quantity_does_not_default_to_one() -> None:
         "cho tôi gel rửa mặt",
         [{"product_reference": "OA002", "quantity": None}],
     ) == [{"product_reference": "OA002", "quantity": None}]
+
+
+def test_whole_bundle_defaults_to_one_of_each_named_product() -> None:
+    items = [
+        {"product_reference": "OA001", "quantity": None},
+        {"product_reference": "OA008", "quantity": None},
+    ]
+
+    assert _apply_one_of_each_quantity(True, items) == [
+        {"product_reference": "OA001", "quantity": 1},
+        {"product_reference": "OA008", "quantity": 1},
+    ]
+
+
+def test_multiple_products_without_bundle_word_keep_missing_quantities() -> None:
+    items = [
+        {"product_reference": "OA001", "quantity": None},
+        {"product_reference": "OA008", "quantity": None},
+    ]
+
+    assert _apply_one_of_each_quantity(False, items) == items
+
+
+def test_order_request_uses_semantic_one_of_each_flag(monkeypatch) -> None:
+    monkeypatch.setattr(
+        order_node_module,
+        "invoke_tool",
+        lambda *_args, **_kwargs: {
+            "name": "provide_complete_order_request",
+            "args": {
+                "items": [
+                    {
+                        "product_reference": "OA002",
+                        "quantity": None,
+                        "quantity_explicitly_provided": False,
+                        "quantity_evidence": "",
+                    },
+                    {
+                        "product_reference": "OA007",
+                        "quantity": None,
+                        "quantity_explicitly_provided": False,
+                        "quantity_evidence": "",
+                    },
+                ],
+                "one_of_each": True,
+                "address": "",
+                "phone": "",
+            },
+        },
+    )
+
+    result = order_node_module._interpret_order_request(
+        "Lấy toàn bộ nhóm sản phẩm vừa nêu",
+        [
+            {"product_id": "OA002", "product_name": "Gel rửa mặt OA Purifying Gel"},
+            {"product_id": "OA007", "product_name": "Kem dưỡng OA Oil-Free Gel Cream"},
+        ],
+    )
+
+    assert result["items"] == [
+        {"product_reference": "OA002", "quantity": 1},
+        {"product_reference": "OA007", "quantity": 1},
+    ]
 
 
 def test_quantity_is_reinterpreted_semantically_when_initial_evidence_is_incomplete(
@@ -225,6 +292,26 @@ def test_vitamin_c_is_not_in_catalog() -> None:
 
     assert result["status"] == "ingredient_not_found"
     assert result["products"] == []
+    assert "không suy ra sản phẩm không chứa" in result["instruction"]
+
+
+def test_catalog_ingredient_chunks_are_marked_as_incomplete_inci() -> None:
+    ingredient_chunk = next(
+        chunk
+        for chunk in build_product_chunks()
+        if chunk["product_id"] == "OA005" and chunk["section"] == "ingredients"
+    )
+
+    assert "thành phần nổi bật" in ingredient_chunk["content"]
+    assert "không phải bảng INCI đầy đủ" in ingredient_chunk["content"]
+
+
+def test_named_product_with_unlisted_alcohol_stays_resolved() -> None:
+    result = search_products_by_ingredient.invoke({"ingredient": "Alcohol"})
+
+    assert result["status"] == "ingredient_not_found"
+    assert result["products"] == []
+    assert "chỉ được nói catalog chưa liệt kê" in result["instruction"]
 
 
 def test_ingredient_search_only_returns_exact_catalog_matches() -> None:

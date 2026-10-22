@@ -171,6 +171,21 @@ class HandoffState(TypedDict, total=False):
     resolution_summary: str
 
 
+class MessageTriage(TypedDict, total=False):
+    user_goals: list[str]
+    requested_operation: str
+    assistant_authority: str
+    is_complaint: bool
+    issue_type: str
+    severity: str
+    explicit_human_preference: bool
+    safety_domains: list[str]
+    response_requirements: list[str]
+    issue_resolved: bool
+    reason: str
+    target_language: str
+
+
 def merge_mapping(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     """Gộp cập nhật từng phần mà không làm mất các trường state cùng tầng."""
     return {**left, **right}
@@ -189,6 +204,7 @@ class AgentState(TypedDict, total=False):
     customer: Annotated[CustomerProfile, merge_mapping]
     active_order: Annotated[OrderState, merge_mapping]
     handoff: Annotated[HandoffState, merge_mapping]
+    triage: MessageTriage
     handoff_action: HandoffAction
     policy_handled: bool
     profile_memory_handled: bool

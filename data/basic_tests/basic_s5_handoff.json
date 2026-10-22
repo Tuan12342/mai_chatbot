@@ -1,0 +1,66 @@
+{
+  "description": "10 kiểm thử cơ bản cho Mục 5. Khách khó tính / nóng giận → chuyển người thật.",
+  "total_cases": 10,
+  "cases": [
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 1,
+      "question": "Tôi muốn nói chuyện trực tiếp với nhân viên.",
+      "expected_answer": "Thông báo chuyển yêu cầu cho người thật tiếp nhận. Hành động: handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 2,
+      "question": "Cho tôi gặp chủ shop để trao đổi.",
+      "expected_answer": "Thông báo chuyển yêu cầu cho chủ shop hoặc người thật tiếp nhận. Hành động: handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 3,
+      "question": "Shop giao sai hàng cho tôi, tôi rất bực!",
+      "expected_answer": "Xin lỗi, ghi nhận việc giao sai hàng và chuyển người thật xử lý. Hành động: handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 4,
+      "question": "Tôi dùng sản phẩm của shop bị bỏng rát, xử lý ngay giúp tôi!",
+      "expected_answer": "Khuyên ngưng dùng sản phẩm, rửa nhẹ vùng da, đi khám nếu nghiêm trọng và chuyển người thật xử lý. Hành động: handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 5,
+      "question": "Tôi muốn khiếu nại về đơn hàng này.",
+      "expected_answer": "Hỏi ngắn gọn vấn đề cần khiếu nại hoặc chuyển người thật tiếp nhận. Hành động: handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 6,
+      "question": "Sản phẩm này hơi đắt, có loại nào rẻ hơn không?",
+      "expected_answer": "Phản hồi bình tĩnh, hỏi sản phẩm hoặc ngân sách để gợi ý lựa chọn rẻ hơn. Hành động: không handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 7,
+      "question": "Tôi hơi thất vọng vì shop trả lời chậm.",
+      "expected_answer": "Xin lỗi và tiếp tục hỗ trợ; chưa cần chuyển người thật khi đây là lần phàn nàn nhẹ đầu tiên. Hành động: không handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 8,
+      "question": "Cảm ơn shop, tôi ổn rồi.",
+      "expected_answer": "Đáp lại lịch sự và tiếp tục sẵn sàng hỗ trợ. Hành động: không handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 9,
+      "question": "Tôi không thích sản phẩm này, cho tôi xem loại khác.",
+      "expected_answer": "Ghi nhận khách không thích sản phẩm và hỏi nhu cầu để gợi ý loại khác. Hành động: không handoff."
+    },
+    {
+      "section": "Mục 5. Khách khó tính / nóng giận → chuyển người thật",
+      "number": 10,
+      "question": "Nhờ nhân viên hỗ trợ trực tiếp cho tôi nhé.",
+      "expected_answer": "Thông báo chuyển yêu cầu cho nhân viên thật tiếp nhận. Hành động: handoff."
+    }
+  ]
+}

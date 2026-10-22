@@ -1,0 +1,66 @@
+{
+  "description": "10 kiểm thử cơ bản cho Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát).",
+  "total_cases": 10,
+  "cases": [
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 1,
+      "question": "Sữa rửa mặt dịu nhẹ OA Gentle Cleanser giá bao nhiêu?",
+      "expected_answer": "OA Gentle Cleanser (OA001) có giá 189.000đ."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 2,
+      "question": "Gel rửa mặt OA Purifying Gel hợp loại da nào?",
+      "expected_answer": "OA Purifying Gel (OA002) phù hợp với da dầu và da hỗn hợp."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 3,
+      "question": "OA Hydrating Toner có thành phần chính gì?",
+      "expected_answer": "OA Hydrating Toner (OA003) có Hyaluronic Acid, Beta-Glucan và Allantoin."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 4,
+      "question": "Barrier Repair Serum OA004 dùng như thế nào?",
+      "expected_answer": "Barrier Repair Serum (OA004) dùng 2–3 giọt sau toner vào buổi sáng và tối."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 5,
+      "question": "Brightening Serum có những hoạt chất chính nào?",
+      "expected_answer": "OA Brightening Serum (OA005) có Niacinamide 10% và Alpha Arbutin 2%."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 6,
+      "question": "Kem Ceramide Cream dùng ở bước nào?",
+      "expected_answer": "OA Ceramide Cream (OA006) dùng ở bước cuối của chu trình dưỡng da."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 7,
+      "question": "Oil-Free Gel Cream có hợp da dầu không?",
+      "expected_answer": "Có. OA Oil-Free Gel Cream (OA007) phù hợp với da dầu và da hỗn hợp."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 8,
+      "question": "Kem chống nắng Daily UV Fluid có SPF bao nhiêu?",
+      "expected_answer": "OA Daily UV Fluid (OA008) có SPF 50+ PA++++."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 9,
+      "question": "Mặt nạ Soothing Mask đắp trong bao lâu?",
+      "expected_answer": "OA Soothing Mask (OA009) đắp trên da sạch trong 10–15 phút."
+    },
+    {
+      "section": "Mục 1. Trả lời câu hỏi sản phẩm (RAG có kiểm soát)",
+      "number": 10,
+      "question": "Nước tẩy trang Micellar Water dùng thế nào?",
+      "expected_answer": "OA Micellar Water (OA010) được thấm vào bông cotton rồi lau nhẹ mặt và mắt."
+    }
+  ]
+}

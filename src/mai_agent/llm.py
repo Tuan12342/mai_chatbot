@@ -1,5 +1,5 @@
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolCall
+from langchain_core.messages import BaseMessage, SystemMessage, ToolCall
 from langchain_core.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -40,7 +40,19 @@ def invoke_tool(
     error_message: str,
 ) -> ToolCall:
     """Yêu cầu model chọn tool và trả về tên cùng tham số đã trích xuất."""
-    response = create_chat_model().bind_tools(tools, tool_choice="any").invoke(messages)
-    if not response.tool_calls:
-        raise RuntimeError(error_message)
-    return response.tool_calls[0]
+    model = create_chat_model().bind_tools(tools, tool_choice="any")
+    current_messages = messages
+    for _attempt in range(3):
+        response = model.invoke(current_messages)
+        if response.tool_calls:
+            return response.tool_calls[0]
+        current_messages = [
+            SystemMessage(
+                content=(
+                    "Phản hồi trước không gọi tool như yêu cầu. Hãy thử lại và bắt buộc "
+                    "gọi đúng một tool phù hợp; không trả lời bằng văn bản thường."
+                )
+            ),
+            *messages,
+        ]
+    raise RuntimeError(error_message)

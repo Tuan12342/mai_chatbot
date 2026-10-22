@@ -39,7 +39,10 @@ def build_product_chunks(products: list[dict[str, Any]] | None = None) -> list[P
                 f"Phù hợp: {', '.join(product['skin_types'])}. "
                 f"Giá: {product['price_vnd']} VND."
             ),
-            "ingredients": f"Thành phần của {label}: {', '.join(product['ingredients'])}.",
+            "ingredients": (
+                f"Các thành phần nổi bật được catalog liệt kê cho {label}: "
+                f"{', '.join(product['ingredients'])}. Đây không phải bảng INCI đầy đủ."
+            ),
             "benefits": f"Công dụng của {label}: {', '.join(product['benefits'])}.",
             "usage": f"Cách dùng {label}: {product['usage']}",
         }
@@ -71,7 +74,22 @@ def resolve_product_references(references: Iterable[str]) -> dict[str, list[Any]
         if alias_ids:
             alias_products = [product for product in products if product["id"] in alias_ids]
             if len(alias_products) == 1:
-                exact = alias_products[0]
+                candidate = alias_products[0]
+                reference_terms = set(normalized_reference.split())
+                candidate_terms = set(
+                    normalize_product_reference(
+                        " ".join(
+                            [candidate["id"], candidate["name"], candidate["category"]]
+                        )
+                    ).split()
+                )
+                # Do not let a short alias swallow a meaningful qualifier that points
+                # to a different or unavailable variant.
+                coverage = len(reference_terms & candidate_terms) / len(reference_terms)
+                exact = candidate if coverage >= 2 / 3 else None
+                if exact is None:
+                    unresolved.append(reference)
+                    continue
             else:
                 unresolved.append(reference)
                 continue

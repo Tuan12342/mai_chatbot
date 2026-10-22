@@ -4,7 +4,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-from mai_agent.catalog import find_product
+from mai_agent.catalog import extract_product_mentions, find_product
 from mai_agent.llm import create_chat_model
 from mai_agent.prompts import SYSTEM_PROMPT
 from mai_agent.skills.product.tools import PRODUCT_TOOLS
@@ -147,6 +147,22 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
         "Không hỏi hoặc tự suy đoán Zalo user ID."
     )
     messages = state.get("messages", [])
+    latest_user_message = next(
+        (
+            str(message.content)
+            for message in reversed(messages)
+            if isinstance(message, HumanMessage)
+        ),
+        "",
+    )
+    resolved_mentions = extract_product_mentions(latest_user_message)
+    resolved_mention_context = (
+        "Catalog resolver đã xác định được các SKU được gọi đích danh trong tin nhắn: "
+        f"{', '.join(resolved_mentions)}. Phải dùng các SKU này khi gọi công cụ và không "
+        "yêu cầu khách nêu lại tên."
+        if resolved_mentions
+        else "Catalog resolver chưa xác định được một SKU duy nhất từ cách gọi hiện tại."
+    )
     must_retrieve_product_data = (
         session.get("current_step") != "awaiting_skin_guidance_confirmation"
         and not _has_product_tool_result_for_latest_user(messages)
@@ -162,16 +178,38 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             "hoặc tên thành phần INCI trong kết quả công cụ.\n"
             f"{pending_product_context}\n"
             f"{skin_followup_context}\n"
+            f"{resolved_mention_context}\n"
             "Quy tắc sử dụng công cụ:\n"
             "- Khi khách hỏi shop có/chứa thành phần X hoặc sản phẩm nào có X, bắt "
             "buộc dùng search_products_by_ingredient. Thành phần phải khớp dữ liệu "
             "ingredients trong catalog; tuyệt đối không lấy công dụng gần giống để "
             "khẳng định sản phẩm chứa X.\n"
+            "- Khi khách hỏi thành phần X có vai trò gì trong sản phẩm, dùng "
+            "search_products_by_ingredient cho X. Chỉ liên hệ với lợi ích tổng thể "
+            "được catalog ghi cho sản phẩm; không tự gán một công dụng chưa có evidence "
+            "cho riêng thành phần.\n"
+            "- Phân biệt câu hỏi 'sản phẩm nào có thành phần X' với câu hỏi 'thành "
+            "phần của sản phẩm X là gì'. Với câu hỏi thành phần của sản phẩm/danh mục "
+            "đã nêu, phải tra sản phẩm đó; không được coi tên hoặc tính chất sản phẩm "
+            "như 'dịu nhẹ', 'toner', 'mặt nạ', 'tẩy trang' là tên thành phần.\n"
+            "  Một từ đứng trong tên/mô tả sản phẩm không trở thành ingredient chỉ vì "
+            "câu hỏi có chữ 'thành phần'. Hãy ưu tiên resolve toàn bộ cụm sản phẩm bằng "
+            "search_product_knowledge hoặc search_products trước.\n"
+            "- Danh sách ingredients là các thành phần nổi bật, không phải bảng INCI "
+            "đầy đủ. Nếu không thấy thành phần X, chỉ nói tài liệu shop chưa liệt kê X; "
+            "không được suy ra 'không chứa X', 'X-free' hoặc an toàn với người cần "
+            "tránh X. Nếu khách cần tránh thành phần đó, đề nghị xác nhận với shop.\n"
             "- Khi công cụ không tìm thấy sản phẩm hoặc thành phần, hãy tự diễn đạt "
-            "tự nhiên rằng hiện shop chưa có. Không yêu cầu khách kiểm tra lại, không "
-            "đưa sản phẩm gần giống và không dùng một câu trả lời mẫu cố định.\n"
+            "tự nhiên rằng catalog hiện không có dữ liệu khớp. Không nói shop có nhiều "
+            "phiên bản, không tự đưa sản phẩm gần giống và không dùng một câu trả lời "
+            "mẫu cố định. Chỉ hỏi lại khi tham chiếu thật sự mơ hồ hoặc có vẻ gõ sai.\n"
             "- Dùng search_product_knowledge khi hỏi thành phần, công dụng, cách dùng, "
             "độ phù hợp hoặc so sánh một sản phẩm đã xác định rõ.\n"
+            "- Khi khách so sánh nhiều sản phẩm đã nêu rõ, truyền đầy đủ tất cả tên/mã "
+            "vào product_references, trình bày điểm liên quan của từng sản phẩm rồi "
+            "kết luận trực tiếp sản phẩm nào phù hợp hơn theo đúng tiêu chí khách hỏi. "
+            "Không bỏ bớt một sản phẩm, không biến câu hỏi thành danh sách gợi ý chung "
+            "và không hỏi khách có muốn sắp xếp routine hay không.\n"
             "- Dùng search_products khi cần tìm theo mã, tên hoặc danh mục.\n"
             "- Dùng check_product_stock khi hỏi tồn kho hoặc số lượng có thể mua.\n"
             "  Khi thiếu hàng, truyền loại da và thành phần cần loại trừ từ hồ sơ trên "
@@ -179,11 +217,20 @@ def assistant_node(state: AgentState) -> dict[str, Any]:
             f"{profile_context}\n"
             "- Khi khách hỏi thông tin về một sản phẩm đã nêu rõ, không dùng loại da "
             "hay thành phần loại trừ trong hồ sơ để đổi câu hỏi thành tư vấn sản phẩm.\n"
+            "- Tự hiểu theo ngữ nghĩa xem khách đã gọi đích danh sản phẩm nào. Nếu tên "
+            "tự nhiên đủ phân biệt với catalog, dùng chính tên đó để tra cứu và không "
+            "hỏi lại SKU. Chỉ hỏi làm rõ khi thực sự còn từ hai lựa chọn hợp lệ trở lên.\n"
             "- Nếu kết quả công cụ chỉ resolve đúng một sản phẩm, chỉ trả lời về sản "
             "phẩm đó; không nêu sản phẩm khác trừ khi kết quả công cụ có alternatives.\n"
             "- Khi giới thiệu, mô tả hoặc đề xuất sản phẩm trong câu trả lời cuối, luôn "
             "ghi kèm mã SKU lấy từ kết quả công cụ để duy trì đúng ngữ cảnh hội thoại.\n"
             "- Chỉ trả lời thông tin sản phẩm từ kết quả công cụ; không tự suy đoán."
+            " Không bổ sung kiến thức mỹ phẩm phổ thông nếu evidence không có. Nếu "
+            "evidence không trả lời được đúng điều khách hỏi, nói rõ tài liệu shop "
+            "chưa đề cập thay vì đưa lời khuyên hoặc khẳng định bên ngoài dữ liệu. Mọi "
+            "con số, thời lượng, tần suất và điều kiện sử dụng trong câu trả lời cuối "
+            "phải xuất hiện trong kết quả công cụ; không thêm ví dụ định lượng từ kiến "
+            "thức chung."
         )
     )
     response = model_with_tools.invoke([system_message, *messages])

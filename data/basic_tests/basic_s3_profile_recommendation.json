@@ -1,0 +1,66 @@
+{
+  "description": "10 kiểm thử cơ bản cho Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn).",
+  "total_cases": 10,
+  "cases": [
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 1,
+      "question": "Em nhớ da chị thuộc loại nào không?",
+      "expected_answer": "Hồ sơ hiện tại ghi nhận chị có da dầu."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 2,
+      "question": "Trong hồ sơ của chị đang tránh thành phần nào?",
+      "expected_answer": "Hồ sơ hiện tại ghi nhận chị tránh Alcohol."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 3,
+      "question": "Dựa trên hồ sơ da dầu của chị, gợi ý một kem dưỡng phù hợp.",
+      "expected_answer": "Có thể gợi ý OA Oil-Free Gel Cream (OA007), sản phẩm phù hợp với da dầu và da hỗn hợp."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 4,
+      "question": "Da chị giờ là da khô, em ghi nhớ giúp chị nhé.",
+      "expected_answer": "Xác nhận đã nhận thấy thông tin da thay đổi từ da dầu sang da khô và xin xác nhận trước khi cập nhật hồ sơ nếu cần."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 5,
+      "question": "Chị dị ứng hương liệu, nhớ giúp chị nhé.",
+      "expected_answer": "Ghi nhận hoặc xin xác nhận lưu thông tin chị dị ứng hương liệu vào hồ sơ, không khẳng định có thể lọc sản phẩm khi dữ liệu chưa đủ."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 6,
+      "question": "Chị quan tâm đến vết thâm sau mụn, lưu giúp chị.",
+      "expected_answer": "Ghi nhận hoặc xin xác nhận lưu mối quan tâm về vết thâm sau mụn vào hồ sơ."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 7,
+      "question": "Chị không muốn dùng sản phẩm có BHA, nhớ giúp chị.",
+      "expected_answer": "Ghi nhận hoặc xin xác nhận lưu yêu cầu tránh BHA vào hồ sơ và không tự thêm thành phần khác."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 8,
+      "question": "Da chị dễ kích ứng, em lưu ý giúp chị nhé.",
+      "expected_answer": "Ghi nhận hoặc xin xác nhận lưu tình trạng da dễ kích ứng vào hồ sơ."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 9,
+      "question": "Chị không thích OA Oil-Free Gel Cream, đừng gợi ý sản phẩm đó nữa.",
+      "expected_answer": "Ghi nhận không tiếp tục gợi ý OA Oil-Free Gel Cream cho chị; không chuyển yêu cầu này thành một lượt tư vấn sản phẩm mới."
+    },
+    {
+      "section": "Mục 3. Tư vấn theo hồ sơ da (cá nhân hoá, có nhớ dài hạn)",
+      "number": 10,
+      "question": "Da dầu thì chị nên dùng sữa rửa mặt nào của shop?",
+      "expected_answer": "Gợi ý OA Purifying Gel (OA002), sản phẩm phù hợp với da dầu và da hỗn hợp."
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "description": "10 kiểm thử cơ bản cho Mục 4. Chốt đơn với khả năng sửa giữa chừng.",
+  "total_cases": 10,
+  "cases": [
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 1,
+      "question": "Chị đặt 1 Brightening Serum.",
+      "expected_answer": "Xác nhận thêm 1 OA Brightening Serum (OA005), giá 359.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 2,
+      "question": "Anh lấy 2 kem chống nắng Daily UV Fluid.",
+      "expected_answer": "Xác nhận 2 OA Daily UV Fluid (OA008), tổng 630.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 3,
+      "question": "Cho tôi mua 1 OA Gentle Cleanser.",
+      "expected_answer": "Xác nhận 1 OA Gentle Cleanser (OA001), giá 189.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 4,
+      "question": "Chị lấy 3 mặt nạ Soothing Mask nhé.",
+      "expected_answer": "Xác nhận 3 OA Soothing Mask (OA009), tổng 147.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 5,
+      "question": "Đặt giúp anh 1 Hydrating Toner.",
+      "expected_answer": "Xác nhận 1 OA Hydrating Toner (OA003), giá 245.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 6,
+      "question": "Tôi muốn mua 1 sản phẩm mã OA006.",
+      "expected_answer": "Xác nhận 1 OA Ceramide Cream (OA006), giá 329.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 7,
+      "question": "Chị lấy 2 chai Micellar Water.",
+      "expected_answer": "Xác nhận 2 OA Micellar Water (OA010), tổng 398.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 8,
+      "question": "Cho anh đặt 1 Oil-Free Gel Cream.",
+      "expected_answer": "Xác nhận 1 OA Oil-Free Gel Cream (OA007), giá 299.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 9,
+      "question": "Mình mua 2 Purifying Gel nhé.",
+      "expected_answer": "Xác nhận 2 OA Purifying Gel (OA002), tổng 438.000đ, rồi hỏi địa chỉ giao hàng."
+    },
+    {
+      "section": "Mục 4. Chốt đơn với khả năng sửa giữa chừng",
+      "number": 10,
+      "question": "Chị muốn đặt 1 serum phục hồi.",
+      "expected_answer": "Xác nhận 1 OA Barrier Repair Serum (OA004), giá 389.000đ, rồi hỏi địa chỉ giao hàng."
+    }
+  ]
+}

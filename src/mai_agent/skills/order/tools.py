@@ -30,8 +30,8 @@ def normalize_order_items(
     mentions = extract_product_mentions(text)
     referenced_ids: set[str] = set()
 
-    # Ambiguous business aliases (for example "serum phục hồi" mapping to
-    # OA004 and OA011) are intentionally not returned by extract_product_mentions.
+    # Ambiguous business aliases (for example "kem dưỡng" mapping to OA006
+    # and OA007) are intentionally not returned by extract_product_mentions.
     # Preserve the original reference when the model omitted it so the order
     # state machine can present every valid SKU instead of asking a generic question.
     alias_candidates = product_alias_candidates(text)

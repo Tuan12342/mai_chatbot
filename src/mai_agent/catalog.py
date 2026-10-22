@@ -34,8 +34,6 @@ PRODUCT_ALIASES: dict[str, tuple[str, ...]] = {
     "sunscreen": ("OA008",),
     "daily uv fluid": ("OA008",),
     "protector solar": ("OA008",),
-    "防晒霜": ("OA008",),
-    "선크림": ("OA008",),
     "mat na": ("OA009",),
     "soothing mask": ("OA009",),
     "face mask": ("OA009",),
@@ -48,17 +46,11 @@ CATEGORY_ALIASES: dict[str, tuple[str, ...]] = {
     "sua rua mat": ("OA001", "OA002"),
     "cleanser": ("OA001", "OA002"),
     "limpiador": ("OA001", "OA002"),
-    "洁面": ("OA001", "OA002"),
-    "클렌저": ("OA001", "OA002"),
     "serum": ("OA004", "OA005"),
     "suero": ("OA004", "OA005"),
-    "精华": ("OA004", "OA005"),
-    "세럼": ("OA004", "OA005"),
     "kem duong": ("OA006", "OA007"),
     "moisturizer": ("OA006", "OA007"),
     "crema hidratante": ("OA006", "OA007"),
-    "面霜": ("OA006", "OA007"),
-    "크림": ("OA006", "OA007"),
 }
 
 
@@ -110,6 +102,19 @@ def extract_product_mentions(text: str) -> list[str]:
         if position < 0 or len(product_ids) != 1:
             continue
         mentions.append((position, product_ids[0]))
+
+    products = load_products()
+    category_products: dict[str, list[str]] = {}
+    for product in products:
+        normalized_category = normalize_product_reference(product["category"])
+        category_products.setdefault(normalized_category, []).append(product["id"])
+    for normalized_category, product_ids in category_products.items():
+        if len(product_ids) != 1:
+            continue
+        position = f" {normalized} ".find(f" {normalized_category} ")
+        if position >= 0:
+            mentions.append((position, product_ids[0]))
+
     mentions.sort()
     return list(dict.fromkeys(product_id for _, product_id in mentions))
 

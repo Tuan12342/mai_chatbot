@@ -70,7 +70,10 @@ def search_products_by_ingredient(ingredient: str) -> dict[str, Any]:
     """Tra chính xác sản phẩm có liệt kê một thành phần trong catalog.
 
     Dùng khi khách hỏi shop có thành phần X không, sản phẩm nào chứa X, hoặc
-    muốn lọc sản phẩm theo thành phần. Không suy ra thành phần từ công dụng.
+    hỏi vai trò của thành phần X trong sản phẩm shop. ``ingredient`` phải là tên
+    thành phần, không phải tính từ mô tả, loại da, công dụng hay loại sản phẩm.
+    Không dùng khi khách hỏi "thành phần của sản phẩm X"; trường hợp đó dùng
+    ``search_product_knowledge`` cho sản phẩm X. Không suy ra thành phần từ công dụng.
     """
     ingredient_query = ingredient.strip()
     normalized_query = normalize_product_reference(ingredient_query)
@@ -98,6 +101,8 @@ def search_products_by_ingredient(ingredient: str) -> dict[str, Any]:
                 "name": product["name"],
                 "matching_ingredients": matching_ingredients,
                 "ingredients": product["ingredients"],
+                "benefits": product["benefits"],
+                "usage": product["usage"],
                 "price_vnd": product["price_vnd"],
                 "stock": product["stock"],
             }
@@ -109,7 +114,15 @@ def search_products_by_ingredient(ingredient: str) -> dict[str, Any]:
         "products": products,
         "instruction": (
             "Chỉ khẳng định sản phẩm chứa thành phần khi sản phẩm nằm trong "
-            "danh sách này. Không thay thế bằng sản phẩm có công dụng tương tự."
+            "danh sách này. Catalog chỉ liệt kê thành phần nổi bật, không phải bảng "
+            "INCI đầy đủ. Khi không tìm thấy, chỉ được nói catalog chưa liệt kê thành "
+            "phần đó; tuyệt đối không suy ra sản phẩm không chứa hoặc an toàn với "
+            "người cần tránh thành phần. Không thay thế bằng sản phẩm có công dụng "
+            "tương tự. Nếu đầu vào thực ra là tính chất hoặc loại sản phẩm chứ không "
+            "phải thành phần, quay lại tra sản phẩm/danh mục được nhắc trong câu hỏi. "
+            "Khi khách hỏi công dụng riêng của thành phần, chỉ mô tả công dụng tổng thể "
+            "mà catalog gắn với sản phẩm chứa nó; không tự quy quan hệ nhân quả cho một "
+            "thành phần nếu catalog không nêu."
         ),
     }
 
@@ -182,8 +195,10 @@ def search_product_knowledge(
 ) -> dict[str, Any]:
     """Semantic search có kiểm soát trên tài liệu sản phẩm của shop.
 
-    product_references chứa mọi mã/tên cần tra. Khi so sánh, phải truyền cả hai
-    sản phẩm để tool lấy evidence riêng cho từng SKU.
+    product_references chứa mọi mã/tên sản phẩm hoặc mô tả đủ phân biệt cần tra.
+    Dùng tool này khi khách hỏi thành phần CỦA sản phẩm, công dụng, cách dùng hoặc
+    độ phù hợp. Không đưa tên một ingredient vào product_references. Khi so sánh,
+    phải truyền cả hai sản phẩm để tool lấy evidence riêng cho từng SKU.
     """
     references = list(product_references or [])
     if not references:
@@ -197,10 +212,16 @@ def search_product_knowledge(
     if references and not resolved_products:
         return {
             "status": "product_not_resolved",
+            "catalog_match": False,
             "resolved_products": [],
             "unresolved_references": unresolved,
             "evidence": [],
-            "instruction": "Không suy đoán sản phẩm; hãy hỏi khách xác nhận tên hoặc mã SKU.",
+            "instruction": (
+                "Tra cứu đã hoàn tất và catalog hiện không có sản phẩm khớp tham chiếu "
+                "khách nêu. Hãy nói rõ không tìm thấy trong catalog hiện tại. Không hỏi "
+                "SKU như thể sản phẩm chắc chắn tồn tại, không khẳng định shop có nhiều "
+                "phiên bản và không tự thay bằng sản phẩm gần giống."
+            ),
         }
 
     if not references:

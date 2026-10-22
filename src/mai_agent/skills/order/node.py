@@ -121,12 +121,14 @@ class OrderRequestItem(BaseModel):
 @tool
 def provide_complete_order_request(
     items: list[OrderRequestItem],
+    one_of_each: bool = False,
     address: str = "",
     phone: str = "",
 ) -> dict[str, Any]:
     """Trích sản phẩm, số lượng và thông tin giao hàng trong cùng tin nhắn."""
     return {
         "items": [item.model_dump() for item in items],
+        "one_of_each": one_of_each,
         "address": address,
         "phone": phone,
     }
@@ -160,6 +162,19 @@ def _validated_quantity(text: str, item: dict[str, Any]) -> int | None:
         return None
     evidence = str(item.get("quantity_evidence", ""))
     return quantity if _has_quantity_evidence(text, evidence) else None
+
+
+def _apply_one_of_each_quantity(
+    one_of_each: bool,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Áp dụng kết quả hiểu ngữ nghĩa 'mỗi loại một' từ structured output."""
+    if not one_of_each or len(items) < 2:
+        return items
+    return [
+        {**item, "quantity": 1 if item.get("quantity") is None else item["quantity"]}
+        for item in items
+    ]
 
 
 @tool
@@ -539,7 +554,11 @@ def _interpret_order_request(
                     "lời mới vào danh sách đó và trả lại đầy đủ từng sản phẩm. Khi khách "
                     "nói một số lượng áp dụng cho tất cả như 'mỗi loại 2', tạo một item "
                     "riêng cho từng sản phẩm đang chờ với cùng số lượng và cùng bằng "
-                    "chứng nguyên văn. Giữ quantity=null cho sản phẩm vẫn chưa có số lượng. "
+                    "chứng nguyên văn. Khi khách muốn lấy toàn bộ nhóm sản phẩm và ý "
+                    "nghĩa là một sản phẩm cho mỗi loại, đặt one_of_each=true; nhận diện "
+                    "theo ý nghĩa chứ không phụ thuộc một cụm từ cố định. Nếu không có ý "
+                    "nghĩa này, đặt one_of_each=false. Giữ quantity=null cho sản phẩm vẫn "
+                    "chưa có số lượng. "
                     "Không tự trả lời khách. "
                     "- “loại này”, “sản phẩm này” là sản phẩm vừa được tư vấn gần nhất. "
                     "Ví dụ 'I want to buy "
@@ -572,7 +591,10 @@ def _interpret_order_request(
         }
         for item in items
     ]
-    normalized_items = normalize_order_items(text, extracted_items)
+    normalized_items = _apply_one_of_each_quantity(
+        bool(args.get("one_of_each")),
+        normalize_order_items(text, extracted_items),
+    )
     if not any(item.get("quantity") is not None for item in normalized_items):
         interpreted_quantity = _interpret_explicit_quantity(text)
     else:

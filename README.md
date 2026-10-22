@@ -184,6 +184,30 @@ uv run python scripts/run_acceptance.py \
 
 Judge không được phép nâng `FAIL_CONTRACT`, `ERROR`, `TIMEOUT` hay `NEEDS_SETUP`
 thành `PASS`. Chế độ này tạo thêm một lần gọi model cho mỗi ca đủ điều kiện chấm.
+Judge không dùng điểm số: kết quả semantic là `PASS`, `FAIL` hoặc `NEEDS_CONTEXT`.
+`Expected answer` chỉ là câu tham chiếu, không phải checklist bắt buộc; các chi tiết
+người dùng không hỏi như giá, SKU hay câu chào không làm câu trả lời bị fail.
+
+### Chạy riêng các câu độc lập một lượt
+
+Tạo lại bộ câu hỏi không cần hội thoại, giỏ hàng hoặc trạng thái từ lượt trước:
+
+```bash
+python scripts/build_standalone_acceptance_set.py
+```
+
+Chạy và chấm bộ standalone vừa tạo:
+
+```bash
+uv run python scripts/run_acceptance.py \
+  --document data/acceptance_standalone_vi_en.json \
+  --output tests/results/acceptance_standalone_vi_en.jsonl \
+  --fresh --judge --timeout 90
+```
+
+File standalone hiện loại các ca phụ thuộc context và lưu danh sách ca bị loại trong
+trường `excluded_cases`. Các ca nhiều lượt nên được kiểm thử bằng scenario runner riêng,
+không tính vào kết quả của bộ này.
 
 Chỉ khi cần kiểm tra cả chức năng chưa triển khai, truyền `--include-out-of-scope`.
 

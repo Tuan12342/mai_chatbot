@@ -98,3 +98,23 @@ def test_ambiguous_signal_defaults_to_profile_language(monkeypatch) -> None:
         "language_code": "en",
         "language_signal": "ambiguous",
     }
+
+
+def test_language_tool_failure_keeps_current_language(monkeypatch) -> None:
+    monkeypatch.setattr(
+        routing,
+        "_interpret_language_signal",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("missing tool call")),
+    )
+
+    update = routing.detect_language_node(
+        {
+            "messages": [HumanMessage(content="Một tin nhắn bất kỳ")],
+            "session": {"language_code": "vi"},
+        }
+    )
+
+    assert update["session"] == {
+        "language_code": "vi",
+        "language_signal": "ambiguous",
+    }

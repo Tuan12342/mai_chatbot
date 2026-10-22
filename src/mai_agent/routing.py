@@ -103,10 +103,15 @@ def detect_language_node(state: AgentState) -> dict[str, Any]:
         preferred_language = customer.get("preferred_language")
         current_language = preferred_language if preferred_language in {"vi", "en"} else "vi"
 
-    signal, signaled_language = _interpret_language_signal(
-        latest_user_text(state).strip(),
-        current_language,
-    )
+    try:
+        signal, signaled_language = _interpret_language_signal(
+            latest_user_text(state).strip(),
+            current_language,
+        )
+    except RuntimeError:
+        # Phân loại ngôn ngữ không phải lý do làm hỏng toàn bộ lượt hội thoại.
+        # Khi structured output thất bại, giữ ngôn ngữ phiên là lựa chọn an toàn.
+        signal, signaled_language = "ambiguous", None
     language: LanguageCode = signaled_language or current_language
     return {
         "session": {
@@ -141,6 +146,12 @@ def route_product_question() -> str:
 
 
 @tool
+def route_product_comparison() -> str:
+    """Khách so sánh các sản phẩm đã nêu rõ hoặc hỏi sản phẩm nào phù hợp hơn."""
+    return "product_comparison"
+
+
+@tool
 def route_greeting() -> str:
     """Khách chỉ đang chào hỏi hoặc bắt đầu cuộc trò chuyện."""
     return "greeting"
@@ -170,6 +181,7 @@ ROUTING_TOOLS = [
     route_order_lookup,
     route_recommendation,
     route_product_question,
+    route_product_comparison,
     route_unknown,
 ]
 
@@ -243,6 +255,10 @@ def _interpret_intent(
                     "thanh toán, giao hàng hoặc thông tin của đơn đã tạo trước đó. Hệ "
                     "thống tự lấy tất cả đơn theo tài khoản của phiên hiện tại, không "
                     "cần khách cung cấp mã đơn hoặc số điện thoại. "
+                    "Chọn route_product_comparison khi khách nêu rõ từ hai sản phẩm "
+                    "trở lên và muốn so sánh, hỏi điểm khác nhau hoặc hỏi sản phẩm nào "
+                    "phù hợp hơn theo một tiêu chí. Đây là câu hỏi về tập sản phẩm đã "
+                    "xác định, không phải yêu cầu tìm thêm sản phẩm mới. "
                     "Nếu khách chỉ hỏi thông tin thì chọn route_product_question. "
                     "Nếu khách cần lựa chọn sản phẩm theo da hoặc cung cấp thêm đặc "
                     "điểm da để tiếp tục tư vấn thì chọn route_recommendation. "
@@ -273,6 +289,7 @@ def _interpret_intent(
         "route_order_lookup": "order_lookup",
         "route_recommendation": "recommendation",
         "route_product_question": "product_question",
+        "route_product_comparison": "product_question",
         "route_unknown": "unknown",
     }
     tool_name = call["name"]

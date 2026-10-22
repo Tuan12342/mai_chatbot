@@ -55,6 +55,25 @@ def test_recent_recommendations_are_passed_to_order_intent_router(monkeypatch) -
     assert "OA002" in captured["prompt"]
 
 
+def test_named_product_comparison_routes_to_product_question(monkeypatch) -> None:
+    captured: dict = {}
+
+    def invoke(_tools, messages, **_kwargs):
+        captured["system_prompt"] = messages[0].content
+        return {"name": "route_product_comparison", "args": {}}
+
+    monkeypatch.setattr(routing, "invoke_tool", invoke)
+
+    intent = routing._interpret_intent(
+        "Serum Brightening với Barrier Repair cái nào hợp da dầu hơn?",
+        "idle",
+        {},
+    )
+
+    assert intent == "product_question"
+    assert "từ hai sản phẩm trở lên" in captured["system_prompt"]
+
+
 def test_short_informal_greeting_has_its_own_intent(monkeypatch) -> None:
     decisions = iter(
         [
