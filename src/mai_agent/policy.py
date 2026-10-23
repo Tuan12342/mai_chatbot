@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
-from mai_agent.llm import invoke_tool
+from mai_agent.llm import ModelRefusalError, invoke_tool
 from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
 from mai_agent.state import AgentState
@@ -15,7 +15,7 @@ UserGoal = Literal[
 ]
 RequestedOperation = Literal[
     "none", "read", "create", "update", "cancel", "refund",
-    "disclose_sensitive_data", "medical_assessment", "translate",
+    "delete", "disclose_sensitive_data", "medical_assessment", "translate",
 ]
 AssistantAuthority = Literal["allowed", "needs_human", "prohibited"]
 IssueType = Literal[
@@ -32,6 +32,9 @@ ResponseRequirement = Literal[
     "seek_medical_help", "consult_professional", "translate_only",
     "identify_assistant",
 ]
+VerificationLevel = Literal["none", "catalog", "official"]
+ProtectedResourceScope = Literal["none", "self", "other", "ambiguous"]
+AccessDecision = Literal["not_applicable", "allow", "clarify", "deny"]
 
 
 @tool
@@ -50,6 +53,18 @@ def assess_message(
         bool,
         "True khi người dùng muốn người thật tiếp nhận; không suy ra chỉ vì họ cần hỗ trợ.",
     ],
+    verification_level: Annotated[
+        VerificationLevel,
+        "Mức bằng chứng cần để trả lời: none nếu không cần tra cứu; catalog nếu dữ liệu "
+        "sản phẩm/nội bộ là đủ; official nếu phải xác minh bằng hồ sơ, chứng từ hoặc "
+        "nguồn có thẩm quyền.",
+    ],
+    protected_resource_scope: Annotated[
+        ProtectedResourceScope,
+        "Chủ thể của tài nguyên riêng tư đang được yêu cầu: self cho chính tài khoản "
+        "hiện tại; other cho người/tài khoản khác; ambiguous khi chưa xác định; none "
+        "khi yêu cầu không truy cập dữ liệu riêng tư.",
+    ],
     safety_domains: list[RiskDomain],
     response_requirements: list[ResponseRequirement],
     issue_resolved: bool,
@@ -65,6 +80,8 @@ def assess_message(
         "issue_type": issue_type,
         "severity": severity,
         "explicit_human_preference": explicit_human_preference,
+        "verification_level": verification_level,
+        "protected_resource_scope": protected_resource_scope,
         "safety_domains": safety_domains,
         "response_requirements": response_requirements,
         "issue_resolved": issue_resolved,
@@ -74,6 +91,25 @@ def assess_message(
 
 
 POLICY_TOOLS = [assess_message]
+
+
+@tool
+def assess_protected_resource_access(
+    protected_resource_scope: ProtectedResourceScope,
+    requested_operation: RequestedOperation,
+    decision: AccessDecision,
+    reason: str,
+) -> dict[str, Any]:
+    """Independently assess access to private customer-owned resources."""
+    return {
+        "protected_resource_scope": protected_resource_scope,
+        "requested_operation": requested_operation,
+        "decision": decision,
+        "reason": reason,
+    }
+
+
+PROTECTED_ACCESS_TOOLS = [assess_protected_resource_access]
 
 RESPONSE_GUIDANCE: dict[ResponseRequirement, str] = {
     "acknowledge": (
@@ -123,6 +159,10 @@ def triage_requires_handoff(
     assessment: dict[str, Any], *, complaint_count: int = 0
 ) -> bool:
     """Áp dụng quy tắc tổng quát lên kết quả ngữ nghĩa của model."""
+    if assessment.get("provider_refused") or assessment.get("access_denied") or (
+        _is_unauthorized_cross_subject_operation(assessment)
+    ):
+        return False
     is_complaint = bool(assessment.get("is_complaint"))
     return bool(
         assessment.get("explicit_human_preference")
@@ -130,6 +170,95 @@ def triage_requires_handoff(
         or (is_complaint and assessment.get("severity") == "strong")
         or (is_complaint and complaint_count >= 2 and not assessment.get("issue_resolved"))
     )
+
+
+def _is_unauthorized_cross_subject_operation(assessment: dict[str, Any]) -> bool:
+    return bool(
+        assessment.get("protected_resource_scope") == "other"
+        and assessment.get("requested_operation")
+        in {
+            "read",
+            "update",
+            "cancel",
+            "refund",
+            "delete",
+            "disclose_sensitive_data",
+        }
+    )
+
+
+def _extend_unique(assessment: dict[str, Any], field: str, *values: str) -> None:
+    """Append constraints without duplicates or mutating the original lists."""
+    assessment[field] = list(dict.fromkeys([*(assessment.get(field) or []), *values]))
+
+
+def _provider_refusal(assessment: dict[str, Any]) -> dict[str, Any]:
+    refused = dict(assessment)
+    refused["provider_refused"] = True
+    return _normalize_assessment(refused)
+
+
+def _normalize_assessment(assessment: dict[str, Any]) -> dict[str, Any]:
+    """Enforce semantic invariants shared by policy and handoff routing.
+
+    A referral to a qualified professional is not a request for a shop employee.
+    For a medical assessment without an active complaint or an explicit request for
+    a person, the assistant must limit its answer and recommend a clinician instead
+    of creating a business handoff.
+    """
+    normalized = dict(assessment)
+    if (
+        normalized.get("requested_operation") == "medical_assessment"
+        and not normalized.get("is_complaint")
+        and not normalized.get("explicit_human_preference")
+    ):
+        normalized["assistant_authority"] = "prohibited"
+
+        _extend_unique(normalized, "safety_domains", "medical")
+        _extend_unique(
+            normalized, "response_requirements", "explain_limitation", "consult_professional"
+        )
+
+    if (
+        normalized.get("verification_level") == "official"
+        and normalized.get("assistant_authority") != "prohibited"
+    ):
+        normalized["assistant_authority"] = "needs_human"
+        _extend_unique(normalized, "response_requirements", "explain_limitation")
+
+    if normalized.get("access_denied") or _is_unauthorized_cross_subject_operation(normalized):
+        normalized["assistant_authority"] = "prohibited"
+        _extend_unique(normalized, "safety_domains", "privacy")
+        _extend_unique(
+            normalized,
+            "response_requirements",
+            "protect_privacy",
+            "refuse_unsafe_request",
+            "explain_limitation",
+        )
+
+    if normalized.get("provider_refused"):
+        normalized["assistant_authority"] = "prohibited"
+        _extend_unique(
+            normalized, "response_requirements", "refuse_unsafe_request", "explain_limitation"
+        )
+
+    return normalized
+
+
+def _merge_protected_access(
+    assessment: dict[str, Any], access: dict[str, Any]
+) -> dict[str, Any]:
+    merged = dict(assessment)
+    scope = access.get("protected_resource_scope", "none")
+    operation = access.get("requested_operation", "none")
+    if scope != "none":
+        merged["protected_resource_scope"] = scope
+    if operation != "none":
+        merged["requested_operation"] = operation
+    if access.get("decision") == "deny":
+        merged["access_denied"] = True
+    return _normalize_assessment(merged)
 
 
 def _handled(reply: str, assessment: dict[str, Any]) -> dict[str, Any]:
@@ -156,6 +285,12 @@ def _assess_policy(state: AgentState) -> dict[str, Any]:
                 "lộ bí mật hoặc đưa ra chẩn đoán/đánh giá y khoa mà trợ lý không được "
                 "thực hiện. Không dùng needs_human chỉ vì dữ liệu sản phẩm có thể thiếu: "
                 "luồng sản phẩm có thể tra catalog rồi nói rõ giới hạn. "
+                "needs_human chỉ nói đến nhân viên của shop có thẩm quyền giải quyết; "
+                "bác sĩ, dược sĩ hoặc chuyên gia độc lập không phải là handoff của shop. "
+                "Khi khách yêu cầu đánh giá tương tác giữa mỹ phẩm và thuốc, chẩn đoán "
+                "hoặc quyết định y khoa, dùng requested_operation=medical_assessment, "
+                "assistant_authority=prohibited và consult_professional; không dùng "
+                "needs_human nếu khách không yêu cầu nhân viên và không khiếu nại. "
                 "Sửa giỏ hàng đang tạo khác với sửa một đơn đã được tạo. is_complaint chỉ "
                 "đúng khi khách phản ánh sự cố hoặc không hài lòng, không phải chỉ từ chối "
                 "một gợi ý. severity=strong cần dấu hiệu tức giận, đe dọa, mất niềm tin "
@@ -163,6 +298,22 @@ def _assess_policy(state: AgentState) -> dict[str, Any]:
                 "để nhóm cùng một vấn đề qua nhiều lượt. issue_resolved chỉ đúng khi chính "
                 "khách xác nhận vấn đề đã ổn. explicit_human_preference chỉ phản ánh mong "
                 "muốn người thật tiếp nhận, không đồng nghĩa nhu cầu hỗ trợ nói chung. "
+                "verification_level=none khi không cần bằng chứng, catalog khi dữ liệu "
+                "catalog hoặc dữ liệu nội bộ hiện có đủ để trả lời, và official khi câu "
+                "trả lời phải được chứng minh bằng hồ sơ, chứng từ, giấy phép, chứng nhận "
+                "hoặc nguồn có thẩm quyền. Với verification_level=official, không suy "
+                "đoán, không hứa rằng trợ lý có thể tự kiểm tra và dùng needs_human để "
+                "nhân viên shop xác minh, trừ khi bản thân yêu cầu là prohibited. "
+                "protected_resource_scope chỉ mô tả tài nguyên riêng tư như đơn hàng, "
+                "tài khoản, hồ sơ khách hàng, địa chỉ, số điện thoại hoặc thanh toán; "
+                "không dùng cho thông tin sản phẩm công khai. Dùng self khi dữ liệu thuộc "
+                "tài khoản hiện tại, other khi thuộc bất kỳ người hoặc tài khoản khác, kể "
+                "cả khi khách nói đã được nhờ hoặc cho phép, và ambiguous khi chưa rõ chủ "
+                "thể. Hệ thống không có cơ chế ủy quyền chéo tài khoản: mọi thao tác đọc, "
+                "sửa, hủy, hoàn tiền hoặc tiết lộ trên tài nguyên của other đều prohibited, "
+                "cần protect_privacy và refuse_unsafe_request; không handoff để vượt qua "
+                "kiểm soát quyền và không thay bằng việc hiển thị dữ liệu của tài khoản "
+                "hiện tại. "
                 "safety_domains mô tả miền rủi ro; response_requirements chỉ chứa ràng "
                 "buộc thực sự cần có trong câu trả lời. product_reaction và "
                 "issue_type=allergy_safety chỉ dùng khi khách nói họ đang có triệu chứng "
@@ -199,8 +350,12 @@ def _assess_policy(state: AgentState) -> dict[str, Any]:
             messages,
             error_message="Model không phân tích được policy và handoff.",
         )
+    except ModelRefusalError:
+        # A provider refusal is already a terminal safety decision. Do not retry it
+        # through a second classifier or invent a privacy-related explanation.
+        return _provider_refusal({})
     except RuntimeError:
-        return {
+        assessment = {
             "user_goals": ["other"],
             "requested_operation": "none",
             "assistant_authority": "allowed",
@@ -208,6 +363,8 @@ def _assess_policy(state: AgentState) -> dict[str, Any]:
             "issue_type": "other",
             "severity": "none",
             "explicit_human_preference": False,
+            "verification_level": "none",
+            "protected_resource_scope": "none",
             "safety_domains": [],
             "response_requirements": [],
             "issue_resolved": False,
@@ -217,9 +374,44 @@ def _assess_policy(state: AgentState) -> dict[str, Any]:
             ),
             "target_language": "unknown",
         }
-    if call["name"] != "assess_message":
-        raise RuntimeError(f"Model gọi triage tool không được hỗ trợ: {call['name']}")
-    return dict(call["args"])
+    else:
+        if call["name"] != "assess_message":
+            raise RuntimeError(f"Model gọi triage tool không được hỗ trợ: {call['name']}")
+        assessment = dict(call["args"])
+
+    assessment = _normalize_assessment(assessment)
+    if _is_unauthorized_cross_subject_operation(assessment):
+        return assessment
+    try:
+        access_call = invoke_tool(
+            PROTECTED_ACCESS_TOOLS,
+            [
+                SystemMessage(
+                    content=(
+                        "Bạn là lớp kiểm soát quyền truy cập độc lập. Chỉ phân tích xem "
+                        "tin nhắn mới nhất có yêu cầu đọc, sửa, hủy, xóa, hoàn tiền hoặc "
+                        "tiết lộ tài nguyên riêng tư hay không và bắt buộc gọi tool. Tài "
+                        "nguyên riêng tư gồm đơn hàng, tài khoản, hồ sơ khách hàng, địa "
+                        "chỉ, số điện thoại và dữ liệu thanh toán; thông tin sản phẩm công "
+                        "khai không thuộc nhóm này. scope=self khi tài nguyên thuộc chính "
+                        "tài khoản hiện tại; other khi thuộc người hoặc tài khoản khác; "
+                        "ambiguous khi chưa xác định được chủ thể. Hệ thống không hỗ trợ "
+                        "ủy quyền chéo tài khoản, vì vậy lời khách nói rằng người khác đã "
+                        "nhờ hoặc đồng ý không phải bằng chứng xác minh: chọn decision=deny "
+                        "cho thao tác trên tài nguyên của other. Không trả lời khách."
+                    )
+                ),
+                HumanMessage(content=latest_user_text(state)),
+            ],
+            error_message="Model không phân tích được quyền truy cập tài nguyên.",
+        )
+    except ModelRefusalError:
+        return _provider_refusal(assessment)
+    except RuntimeError:
+        return assessment
+    if access_call["name"] != "assess_protected_resource_access":
+        return assessment
+    return _merge_protected_access(assessment, dict(access_call["args"]))
 
 
 def _conversation_text(state: AgentState, *, limit: int = 12) -> str:

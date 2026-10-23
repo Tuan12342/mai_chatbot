@@ -189,7 +189,7 @@ SCOPE_TOOLS = [route_in_scope, route_out_of_scope]
 
 
 def _is_out_of_scope(text: str, current_step: str) -> bool:
-    """Dùng Gemini chặn yêu cầu ngoài phạm vi trước khi phân luồng."""
+    """Dùng model chặn yêu cầu ngoài phạm vi trước khi phân luồng."""
     call = invoke_tool(
         SCOPE_TOOLS,
         [
@@ -219,14 +219,14 @@ def _is_out_of_scope(text: str, current_step: str) -> bool:
                 content=(f"Bước hội thoại hiện tại: {current_step}\nTin nhắn khách: {text}")
             ),
         ],
-        error_message="Gemini không trả kết quả kiểm tra phạm vi.",
+        error_message="Model không trả kết quả kiểm tra phạm vi.",
     )
     tool_name = call["name"]
     if tool_name == "route_out_of_scope":
         return True
     if tool_name == "route_in_scope":
         return False
-    raise RuntimeError(f"Gemini gọi scope tool không được hỗ trợ: {tool_name}")
+    raise RuntimeError(f"Model gọi scope tool không được hỗ trợ: {tool_name}")
 
 
 def _interpret_intent(
@@ -281,7 +281,7 @@ def _interpret_intent(
                 )
             ),
         ],
-        error_message="Gemini không chọn intent cho tin nhắn.",
+        error_message="Model không chọn intent cho tin nhắn.",
     )
     tool_to_intent: dict[str, Intent] = {
         "route_greeting": "greeting",
@@ -294,7 +294,7 @@ def _interpret_intent(
     }
     tool_name = call["name"]
     if tool_name not in tool_to_intent:
-        raise RuntimeError(f"Gemini gọi routing tool không được hỗ trợ: {tool_name}")
+        raise RuntimeError(f"Model gọi routing tool không được hỗ trợ: {tool_name}")
     return tool_to_intent[tool_name]
 
 
@@ -317,10 +317,21 @@ def classify_intent_node(state: AgentState) -> dict[str, Any]:
     current_step = session.get("current_step", "idle")
     if current_step not in get_args(ConversationStep):
         current_step = "idle"
-    if _is_out_of_scope(text, current_step):
+    try:
+        is_out_of_scope = _is_out_of_scope(text, current_step)
+    except RuntimeError:
+        # Scope chỉ là lớp chặn sơ bộ. Khi structured output tạm thời lỗi, tiếp tục
+        # phân loại intent thay vì làm hỏng toàn bộ request bằng HTTP 502.
+        is_out_of_scope = False
+
+    if is_out_of_scope:
         intent: Intent = "unknown"
     else:
-        intent = _interpret_intent(text, current_step, _pending_context(session))
+        try:
+            intent = _interpret_intent(text, current_step, _pending_context(session))
+        except RuntimeError:
+            # Nếu cả intent classifier không trả tool call, đi vào fallback tự nhiên.
+            intent = "unknown"
     session_update: SessionState = {
         "session_id": session.get("session_id", state.get("user_id", "anonymous")),
         "language_code": session.get("language_code", "vi"),

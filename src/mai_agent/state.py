@@ -172,6 +172,8 @@ class HandoffState(TypedDict, total=False):
 
 
 class MessageTriage(TypedDict, total=False):
+    provider_refused: bool
+    access_denied: bool
     user_goals: list[str]
     requested_operation: str
     assistant_authority: str
@@ -179,6 +181,8 @@ class MessageTriage(TypedDict, total=False):
     issue_type: str
     severity: str
     explicit_human_preference: bool
+    verification_level: str
+    protected_resource_scope: str
     safety_domains: list[str]
     response_requirements: list[str]
     issue_resolved: bool

@@ -112,6 +112,16 @@ def test_non_complaint_without_business_verification_continues(monkeypatch) -> N
     assert result["handoff_action"] == "continue"
 
 
+def test_official_verification_followup_does_not_ask_for_complaint_details() -> None:
+    guidance = handoff_node_module._followup_guidance(
+        {"triage": {"verification_level": "official"}}, "other"
+    )
+
+    assert "không có bằng chứng đã được xác minh" in guidance
+    assert "không suy đoán" in guidance.lower()
+    assert "lý do khiếu nại" not in guidance
+
+
 def test_handoff_guard_reuses_multi_label_triage_without_second_model_call(
     monkeypatch,
 ) -> None:

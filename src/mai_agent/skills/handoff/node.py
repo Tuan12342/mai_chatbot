@@ -7,7 +7,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from mai_agent.customer_store import find_customer_by_zalo_id
 from mai_agent.llm import invoke_tool
 from mai_agent.order_store import find_orders_by_customer_id
-from mai_agent.policy import RESPONSE_GUIDANCE, triage_requires_handoff
+from mai_agent.policy import (
+    RESPONSE_GUIDANCE,
+    _normalize_assessment,
+    triage_requires_handoff,
+)
 from mai_agent.reply_generator import generate_reply
 from mai_agent.routing import latest_user_text
 from mai_agent.skills.handoff.store import (
@@ -42,8 +46,11 @@ def _assess_latest_message(state: AgentState) -> dict[str, Any]:
                     "xác minh ngoài dữ liệu, prohibited nếu phải từ chối. is_complaint chỉ "
                     "đúng với phản ánh sự cố hoặc không hài lòng; severity=strong chỉ khi "
                     "có cường độ hoặc hậu quả đáng kể. explicit_human_preference chỉ đúng "
-                    "khi khách muốn người thật tiếp nhận. Giữ issue_type nhất quán cho "
-                    "cùng một vấn đề và không tự trả lời khách."
+                    "khi khách muốn người thật tiếp nhận. protected_resource_scope=other "
+                    "khi khách muốn đọc hoặc thay đổi đơn hàng, tài khoản, địa chỉ, hồ sơ "
+                    "hay dữ liệu riêng của người khác; lời nói rằng đã được nhờ không phải "
+                    "xác minh ủy quyền. Giữ issue_type nhất quán cho cùng một vấn đề và "
+                    "không tự trả lời khách."
                 )
             ),
             HumanMessage(
@@ -99,7 +106,9 @@ def handoff_guard_node(state: AgentState) -> dict[str, Any]:
                 },
             }
 
-    assessment = dict(state.get("triage") or _assess_latest_message(state))
+    assessment = _normalize_assessment(
+        dict(state.get("triage") or _assess_latest_message(state))
+    )
     issue_type = str(assessment.get("issue_type", "none"))
     counts = dict(handoff.get("complaint_counts", {}))
     if assessment.get("issue_resolved") and issue_type != "none":
@@ -130,33 +139,15 @@ def route_handoff(state: AgentState) -> HandoffAction:
     return state.get("handoff_action", "continue")
 
 
-def create_handoff_node(state: AgentState) -> dict[str, Any]:
-    now = datetime.now().astimezone().isoformat()
-    handoff = state.get("handoff", {})
-    handoff_id = f"HO-{datetime.now():%Y%m%d}-{uuid4().hex[:8].upper()}"
-    user_id = state.get("user_id", "anonymous")
-    customer = state.get("customer") or find_customer_by_zalo_id(user_id) or {}
-    customer_id = str(customer.get("zalo_user_id", user_id))
-    package = {
-        "handoff_id": handoff_id,
-        "user_id": user_id,
-        "status": "waiting_for_human",
-        "reason": handoff.get("reason", "Khách cần người thật hỗ trợ."),
-        "issue_type": handoff.get("issue_type", "other"),
-        "severity": handoff.get("severity", "none"),
-        "complaint_count": handoff.get("complaint_count", 0),
-        "customer": customer,
-        "conversation_history": _serialize_messages(state),
-        "current_cart": state.get("session", {}).get("cart", []),
-        "current_step": state.get("session", {}).get("current_step", "idle"),
-        "active_order": state.get("active_order", {}),
-        "related_orders": find_orders_by_customer_id(customer_id),
-        "messages_after_handoff": [],
-        "created_at": now,
-        "updated_at": now,
-    }
-    save_handoff(package)
-    issue_type = str(handoff.get("issue_type", "other"))
+def _followup_guidance(state: AgentState, issue_type: str) -> str:
+    if state.get("triage", {}).get("verification_level") == "official":
+        return (
+            "Nói rõ trợ lý không có bằng chứng đã được xác minh để tự khẳng định thông "
+            "tin này và nhân viên shop cần cung cấp hồ sơ hoặc nguồn chính thức nếu có. "
+            "Không suy đoán, không hứa rằng thông tin hoặc hồ sơ chắc chắn tồn tại và "
+            "không hỏi khách cung cấp lại nội dung vừa nêu."
+        )
+
     followup_by_issue = {
         "allergy_safety": (
             "Khuyên khách ngưng sản phẩm ngay; nếu phản ứng nặng, lan rộng hoặc đau rát, "
@@ -186,7 +177,37 @@ def create_handoff_node(state: AgentState) -> dict[str, Any]:
         ),
         "other": "Nếu khách chưa nói lý do khiếu nại, hỏi một câu ngắn để bổ sung lý do.",
     }
-    followup = followup_by_issue.get(issue_type, "")
+    return followup_by_issue.get(issue_type, "")
+
+
+def create_handoff_node(state: AgentState) -> dict[str, Any]:
+    now = datetime.now().astimezone().isoformat()
+    handoff = state.get("handoff", {})
+    handoff_id = f"HO-{datetime.now():%Y%m%d}-{uuid4().hex[:8].upper()}"
+    user_id = state.get("user_id", "anonymous")
+    customer = state.get("customer") or find_customer_by_zalo_id(user_id) or {}
+    customer_id = str(customer.get("zalo_user_id", user_id))
+    package = {
+        "handoff_id": handoff_id,
+        "user_id": user_id,
+        "status": "waiting_for_human",
+        "reason": handoff.get("reason", "Khách cần người thật hỗ trợ."),
+        "issue_type": handoff.get("issue_type", "other"),
+        "severity": handoff.get("severity", "none"),
+        "complaint_count": handoff.get("complaint_count", 0),
+        "customer": customer,
+        "conversation_history": _serialize_messages(state),
+        "current_cart": state.get("session", {}).get("cart", []),
+        "current_step": state.get("session", {}).get("current_step", "idle"),
+        "active_order": state.get("active_order", {}),
+        "related_orders": find_orders_by_customer_id(customer_id),
+        "messages_after_handoff": [],
+        "created_at": now,
+        "updated_at": now,
+    }
+    save_handoff(package)
+    issue_type = str(handoff.get("issue_type", "other"))
+    followup = _followup_guidance(state, issue_type)
     response_constraints = " ".join(
         RESPONSE_GUIDANCE[requirement]
         for requirement in state.get("triage", {}).get("response_requirements", [])

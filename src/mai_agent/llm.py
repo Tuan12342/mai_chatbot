@@ -7,6 +7,10 @@ from langchain_openai import ChatOpenAI
 from mai_agent.config import get_settings
 
 
+class ModelRefusalError(RuntimeError):
+    """Raised when the provider explicitly refuses a structured classification."""
+
+
 def create_chat_model() -> BaseChatModel:
     settings = get_settings()
     provider = settings.llm_provider.strip().casefold()
@@ -46,6 +50,9 @@ def invoke_tool(
         response = model.invoke(current_messages)
         if response.tool_calls:
             return response.tool_calls[0]
+        refusal = response.additional_kwargs.get("refusal")
+        if refusal:
+            raise ModelRefusalError(str(refusal))
         current_messages = [
             SystemMessage(
                 content=(
