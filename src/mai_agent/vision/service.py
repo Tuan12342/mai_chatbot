@@ -346,10 +346,10 @@ class SkinConsultationService:
         }
         with langfuse_observation(
             self.langfuse,
-            name="misa-product-selection",
+            name="gemini-product-selection",
             as_type="generation",
             input=selection_context,
-            model=self.settings.misa_model,
+            model=self.settings.google_model,
         ) as generation:
             selected_ids, selection_reason = select_skin_products(
                 selection_context,
@@ -414,7 +414,7 @@ class SkinConsultationService:
             ),
             "skin_type_from_current_message": skin_type or "not_provided",
             "selection_policy": {
-                "decision_owner": "misa_model",
+                "decision_owner": "gemini_model",
                 "sku_validation_owner": "application_code",
                 "selection_reason": selection_reason,
                 "final_response_model_must_not_reselect": True,
@@ -452,10 +452,10 @@ class SkinConsultationService:
         }
         with langfuse_observation(
             self.langfuse,
-            name="misa-final-response",
+            name="gemini-final-response",
             as_type="generation",
             input=context,
-            model=self.settings.misa_model,
+            model=self.settings.google_model,
         ) as generation:
             reply = _remove_source_attribution(
                 generate_skin_reply(context, response_language=language)

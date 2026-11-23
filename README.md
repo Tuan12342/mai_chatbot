@@ -26,8 +26,8 @@ Luồng xử lý tách biệt trách nhiệm:
 
 ```text
 Ảnh → Google VLM quan sát bề mặt → chặn y khoa/dấu hiệu nguy cơ
-    → code lọc ứng viên bắt buộc → MISA chọn SKU từ kho tri thức cục bộ
-    → code xác minh SKU → MISA viết câu trả lời Việt/Anh
+    → code lọc ứng viên bắt buộc → Gemini chọn SKU từ kho tri thức cục bộ
+    → code xác minh SKU → Gemini viết câu trả lời Việt/Anh
 ```
 
 VLM không có schema chẩn đoán bệnh. Nếu khách yêu cầu chẩn đoán/kê thuốc hoặc ảnh
@@ -35,7 +35,7 @@ có dấu hiệu nguy cơ, hệ thống dừng trước bước truy xuất và 
 Luồng ảnh không gọi Google Search hoặc Google Embedding. Mỗi SKU có knowledge record
 trong `data/product_knowledge.json`, gồm vai trò routine, lý do lựa chọn và lưu ý an
 toàn. Không còn công thức điểm hoặc ngưỡng match. Code lọc tồn kho, loại da được nói
-trong request, thành phần loại trừ và care mode; MISA chỉ được chọn SKU trong danh sách
+trong request, thành phần loại trừ và care mode; Gemini chỉ được chọn SKU trong danh sách
 ứng viên này. Giá, tồn kho và thông tin catalog vẫn được kiểm tra từ `data/products.json`.
 
 Cấu hình:
@@ -58,7 +58,7 @@ curl -X POST http://127.0.0.1:8000/api/skin-analysis \
 ```
 
 Tư vấn ảnh không dùng hồ sơ da lịch sử. Nếu câu hỏi hiện tại không nói loại da, hệ thống
-để MISA suy luận từ đặc điểm bề mặt hiện tại và kho tri thức, đồng thời phải nói rõ chưa
+để Gemini suy luận từ đặc điểm bề mặt hiện tại và kho tri thức, đồng thời phải nói rõ chưa
 xác nhận loại da. Kết quả chọn được code xác minh lại trước khi tạo câu trả lời cuối.
 
 ## Luồng graph
@@ -109,13 +109,10 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
-Mặc định ứng dụng dùng Google Gemini. Để kiểm thử với MISA AI Gateway, cấu hình:
+Ứng dụng dùng Gemini 3.5 Flash-Lite cho hội thoại, chọn sản phẩm và viết câu trả lời. Cấu hình:
 
 ```dotenv
-LLM_PROVIDER=misa
-MISA_API_KEY=<token của bạn>
-MISA_BASE_URL=https://ai.misa.vn/nlp/llm-gateway/v1
-MISA_MODEL=misa-ai-1.1-plus
+GOOGLE_MODEL=gemini-3.5-flash-lite
 LLM_TIMEOUT_SECONDS=60
 LLM_MAX_RETRIES=1
 ```

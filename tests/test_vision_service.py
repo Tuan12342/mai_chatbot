@@ -384,8 +384,8 @@ def test_safe_result_creates_detailed_langfuse_observations() -> None:
         "google-vlm",
         "image-safety-classification",
         "local-product-knowledge",
-        "misa-product-selection",
-        "misa-final-response",
+        "gemini-product-selection",
+        "gemini-final-response",
     ]
     assert langfuse.observations[1].attributes["input"] == {
         "mime_type": "image/jpeg",
