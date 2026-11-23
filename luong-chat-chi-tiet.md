@@ -27,7 +27,7 @@ json
  `chat()` dùng `.strip()` để bỏ khoảng trắng đầu cuối và kiểm tra nội dung còn lại.
  `get_chat_session(session_id, user_id)` truy vấn SQLite theo cả hai mã.
 
-Đây là cơ chế kiểm tra dành cho giao diện thử nghiệm. Handler nhận `user_id` từ payload và đối chiếu với hồ sơ cùng bản ghi phiên. Sau khi qua kiểm tra, API gọi `graph.invoke()` với `user_id` và `messages=[HumanMessage(content=message)]`. `session_id` được truyền dưới dạng `thread_id` để LangGraph dùng đúng checkpoint trong `data/chat_checkpoints.sqlite`.
+
 
 
 
@@ -52,3 +52,27 @@ Kiểm tra chuyển nhân viên [skills/handoff/node.py](src/mai_agent/skills/ha
 
 
 `api.py` cập nhật phiên và trả JSON về trình duyệt với `reply`, `current_step`, `cart`, `handoff_status` và `payment` nếu có. Nếu lỗi xảy ra trong khối chạy graph, lưu đơn hoặc cập nhật phiên, API ghi log và trả HTTP 502.
+
+5. Đường đi theo từng file và hàm
+
+
+
+
+
+1. [web/index.html](src/mai_agent/web/index.html#L180) → `sendMessage()` lấy câu chữ khách nhập và gửi `POST /api/chat` với `message`, `user_id` và `session_id`.
+2. [api.py](src/mai_agent/api.py#L264) → `chat()` nhận payload qua `ChatRequest`. Hàm gọi [customer_store.py](src/mai_agent/customer_store.py) → `find_customer_by_zalo_id()` để tìm người dùng trong `data/customers.json`, rồi gọi [chat_sessions.py](src/mai_agent/chat_sessions.py#L76) → `get_chat_session()` để kiểm tra cặp mã phiên và người dùng trong SQLite.
+3. [api.py](src/mai_agent/api.py#L118) → `_invoke_graph()` chuyển nội dung thành `HumanMessage` và gọi graph được dựng trong [graph.py](src/mai_agent/graph.py#L58). Mã phiên trở thành `thread_id` để LangGraph dùng checkpoint của đúng cuộc trò chuyện.
+4. [graph.py](src/mai_agent/graph.py#L87) → [routing.py](src/mai_agent/routing.py#L98) → `detect_language_node()` cập nhật `session.language_code`. Graph chuyển sang `policy_guard`.
+
+Luồng rẽ nhánh
+
+1. [graph.py](src/mai_agent/graph.py#L87) → [policy.py](src/mai_agent/policy.py#L486) → `policy_guard_node()` gọi `_assess_policy()` với tin nhắn mới và lịch sử gần đây.
+2. `policy.py` → [llm.py](src/mai_agent/llm.py) → `invoke_tool()` gọi Gemini để lấy kết quả `assess_message`. Nếu lượt này chưa xác định rõ thao tác bị cấm trên dữ liệu của người khác, luồng bình thường gọi tiếp tool `assess_protected_resource_access` với tin nhắn mới nhất. `policy.py` chuẩn hóa và gộp các kết quả vào `triage`.
+3. Nếu cần phản hồi theo chính sách, `policy.py` → [reply_generator.py](src/mai_agent/reply_generator.py#L8) → `llm.py` để soạn câu trả lời. Node đặt `policy_handled=True`, rồi `route_after_policy_guard()` trả `end`.
+4. Nếu cần tiếp tục, `policy.py` trả `triage` cùng `policy_handled=False`. `graph.py` gọi [skills/handoff/node.py](src/mai_agent/skills/handoff/node.py#L83) → `handoff_guard_node()`. Nhánh `create` hoặc `wait` đi qua bước xử lý nhân viên rồi kết thúc lượt. Nhánh `continue` chuyển sang xác nhận hồ sơ.
+
+ Trả kết quả về trình duyệt
+
+[api.py](src/mai_agent/api.py#L264) nhận kết quả từ graph → cập nhật phiên qua `chat_sessions.py` → lấy thông tin thanh toán qua `payment.py` nếu có đơn đủ điều kiện → trả `ChatResponse` → [web/index.html](src/mai_agent/web/index.html#L194) đọc JSON và hiển thị câu trả lời hoặc thẻ thanh toán.
+
+Ví dụ với **“OA001 dùng thế nào?”**, đường đi dự kiến là `web/index.html → api.py → graph.py → routing.py → policy.py → skills/handoff/node.py → profile_memory.py → routing.py → skills/product/node.py → skills/product/tools.py → skills/product/node.py → api.py → web/index.html`. Lần đầu qua `routing.py` là nhận diện ngôn ngữ. Lần sau là phân loại yêu cầu.
